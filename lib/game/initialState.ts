@@ -5,6 +5,7 @@ import {
   STARTING_SOLDIERS,
 } from './constants';
 import type { FactionId } from './factions';
+import type { ControllerKind } from './types';
 import type { Board, GameState } from './types';
 
 export function createInitialBoard(): Board {
@@ -36,6 +37,8 @@ export function createInitialBoard(): Board {
 export function createInitialState(
   humanFaction: FactionId,
   botFaction: FactionId,
+  humanController: ControllerKind = 'human',
+  botController: ControllerKind = 'ai',
 ): GameState {
   return {
     board: createInitialBoard(),
@@ -46,6 +49,8 @@ export function createInitialState(
     winner: null,
     humanFaction,
     botFaction,
-    log: ['Game started. Human moves first.'],
+    humanController,
+    botController,
+    log: ['Game started.'],
   };
 }

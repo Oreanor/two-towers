@@ -26,8 +26,10 @@
     "language": "Language",
     "logout": "Sign out",
     "pickSides": "Choose sides",
-    "yourSide": "You",
-    "botSide": "Bot",
+    "sideLeft": "Lower-left corner",
+    "sideRight": "Upper-right corner",
+    "playerHuman": "Human",
+    "playerBot": "Bot",
     "startGame": "Start game"
   },
   "factions": {
@@ -71,6 +73,8 @@
     "goCount": "March",
     "stayCount": "Stay",
     "botThinking": "Bot is thinking…",
+    "autoBattle": "Auto battle…",
+    "autoBattleOver": "Auto battle finished",
     "notFound": "Game not found",
     "toLobby": "To lobby"
   },
@@ -80,7 +84,9 @@
     "winSub": "The enemy castle has fallen",
     "lossSub": "Your castle has fallen",
     "again": "Play again",
-    "viewBoard": "View board"
+    "viewBoard": "View board",
+    "spectatorWin": "Victory: {faction}",
+    "spectatorSub": "Bot vs bot"
   },
   "languages": {
     "ru": "Русский",

@@ -7,7 +7,7 @@ import { placeIncome } from '../lib/game/rules';
 import type { GameState } from '../lib/game/types';
 
 let state: GameState = startTurn(
-  createInitialState('gondor', 'mordor'),
+  createInitialState('gondor', 'mordor', 'human', 'ai'),
   'human',
 );
 

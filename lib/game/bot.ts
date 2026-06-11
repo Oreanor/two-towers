@@ -15,6 +15,7 @@ import {
   getNeighbors,
   getPlayerCells,
   manhattan,
+  opponentOf,
   refOf,
 } from './selectors';
 import type { BotAction, Cell, GameState } from './types';
@@ -22,21 +23,20 @@ import type { BotAction, Cell, GameState } from './types';
 const BOT_FORT_MIN_SOLDIERS = 8;
 const BOT_OCCUPY_MIN_SOURCE = 3;
 
-/**
- * Автораспределение дохода бота: ближайшая к фронту точка мобилизации
- * (форт, иначе замок); при равенстве — где меньше солдат.
- */
+/** Reinforce the mobilization point closest to the enemy front. */
 export function allocateBotIncome(state: GameState): GameState {
   if (state.pendingIncome === 0) return { ...state, phase: 'action' };
 
-  const humanCells = getPlayerCells(state.board, 'human');
-  const points = getMobilizationCells(state.board, 'bot');
+  const self = state.currentPlayer;
+  const enemy = opponentOf(self);
+  const enemyCells = getPlayerCells(state.board, enemy);
+  const points = getMobilizationCells(state.board, self);
   if (points.length === 0) return { ...state, phase: 'action' };
 
   const distToFront = (cell: Cell) =>
-    humanCells.length === 0
+    enemyCells.length === 0
       ? 0
-      : Math.min(...humanCells.map((h) => manhattan(refOf(cell), refOf(h))));
+      : Math.min(...enemyCells.map((h) => manhattan(refOf(cell), refOf(h))));
 
   const sorted = [...points].sort((a, b) => {
     const fortPriority =
@@ -56,31 +56,31 @@ function attackWeight(target: Cell): number {
   return 10 + target.soldiers;
 }
 
-/** Сколько солдат бот отправляет занимать пустую клетку (риска провала нет). */
 function occupySquadSize(state: GameState, source: Cell, target: Cell): number {
   const center = { row: 1.5, col: 1.5 };
   const nearCenter =
     Math.abs(target.row - center.row) + Math.abs(target.col - center.col) <= 2;
+  const enemy = opponentOf(state.currentPlayer);
   const enemyNearby = getNeighbors(state.board, refOf(target)).some(
-    (n) => n.owner === 'human',
+    (n) => n.owner === enemy,
   );
-  const available = source.soldiers - 1; // гарнизон остаётся
+  const available = source.soldiers - 1;
   const desired = nearCenter || enemyNearby ? 5 : 2;
   return Math.max(1, Math.min(desired, available));
 }
 
 export function chooseBotAction(state: GameState): BotAction {
-  const botCells = getPlayerCells(state.board, 'bot');
-  const humanCells = getPlayerCells(state.board, 'human');
+  const self = state.currentPlayer;
+  const enemy = opponentOf(self);
+  const ownCells = getPlayerCells(state.board, self);
+  const enemyCells = getPlayerCells(state.board, enemy);
 
-  // 1-3. Лучшая доступная атака (захват замка имеет вес 1000 и всегда выберется первым).
   let bestAttack: BotAction | null = null;
   let bestWeight = -1;
-  for (const source of botCells) {
+  for (const source of ownCells) {
     for (const target of getNeighbors(state.board, refOf(source))) {
-      if (target.owner !== 'human') continue;
+      if (target.owner !== enemy) continue;
       const needed = effectiveDefense(target) + 1;
-      // отправляем всё, кроме гарнизона на клетке со зданием
       const sent =
         source.building !== null ? source.soldiers - 1 : source.soldiers;
       if (sent < needed) continue;
@@ -99,20 +99,18 @@ export function chooseBotAction(state: GameState): BotAction {
   }
   if (bestAttack) return bestAttack;
 
-  // 4. Занятие пустой клетки.
   let bestOccupy: BotAction | null = null;
   let bestOccupyScore = -1;
-  for (const source of botCells) {
+  for (const source of ownCells) {
     if (source.soldiers < BOT_OCCUPY_MIN_SOURCE) continue;
     for (const target of getNeighbors(state.board, refOf(source))) {
       if (target.owner !== null) continue;
       const squad = occupySquadSize(state, source, target);
       if (!canOccupy(state, refOf(source), refOf(target), squad)) continue;
-      // предпочитаем клетки ближе к игроку
       const dist =
-        humanCells.length === 0
+        enemyCells.length === 0
           ? 0
-          : Math.min(...humanCells.map((h) => manhattan(refOf(target), refOf(h))));
+          : Math.min(...enemyCells.map((h) => manhattan(refOf(target), refOf(h))));
       const score = 100 - dist;
       if (score > bestOccupyScore) {
         bestOccupyScore = score;
@@ -127,8 +125,7 @@ export function chooseBotAction(state: GameState): BotAction {
   }
   if (bestOccupy) return bestOccupy;
 
-  // 5. Форт: клетка с 8+ солдатами без здания.
-  const fortCell = botCells.find(
+  const fortCell = ownCells.find(
     (cell) =>
       cell.building === null &&
       cell.soldiers >= BOT_FORT_MIN_SOLDIERS &&
@@ -136,22 +133,20 @@ export function chooseBotAction(state: GameState): BotAction {
   );
   if (fortCell) return { type: 'buildFort', cell: refOf(fortCell) };
 
-  // 6. Движение к фронту: самая большая армия идёт к ближайшей клетке игрока.
-  if (humanCells.length > 0) {
-    const army = [...botCells].sort((a, b) => b.soldiers - a.soldiers)[0];
+  if (enemyCells.length > 0) {
+    const army = [...ownCells].sort((a, b) => b.soldiers - a.soldiers)[0];
     if (army && army.soldiers > 1) {
       const currentDist = Math.min(
-        ...humanCells.map((h) => manhattan(refOf(army), refOf(h))),
+        ...enemyCells.map((h) => manhattan(refOf(army), refOf(h))),
       );
       const step = getNeighbors(state.board, refOf(army))
-        .filter((n) => n.owner === 'bot')
+        .filter((n) => n.owner === self)
         .find(
           (n) =>
-            Math.min(...humanCells.map((h) => manhattan(refOf(n), refOf(h)))) <
+            Math.min(...enemyCells.map((h) => manhattan(refOf(n), refOf(h)))) <
             currentDist,
         );
       if (step) {
-        // половина армии, округляя вниз — на исходной всегда остаётся минимум 1
         const soldiers = Math.floor(army.soldiers / 2);
         if (soldiers > 0) {
           return {
@@ -168,13 +163,11 @@ export function chooseBotAction(state: GameState): BotAction {
   return { type: 'pass' };
 }
 
-/**
- * Полный ход бота: распределить доход, выбрать и выполнить действие,
- * передать ход. Вызывается на состоянии после startTurn(state, 'bot').
- */
+/** Full AI turn for whoever is `state.currentPlayer`. */
 export function executeBotTurn(state: GameState): GameState {
   let next = allocateBotIncome(state);
   const action = chooseBotAction(next);
+  const who = state.currentPlayer === 'human' ? 'Human' : 'Bot';
 
   switch (action.type) {
     case 'attack':
@@ -190,7 +183,7 @@ export function executeBotTurn(state: GameState): GameState {
       next = moveSoldiers(next, action.from, action.to, action.soldiers);
       break;
     case 'pass':
-      next = { ...next, log: [...next.log, 'Bot passed.'] };
+      next = { ...next, log: [...next.log, `${who} passed.`] };
       break;
   }
 

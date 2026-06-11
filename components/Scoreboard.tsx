@@ -1,6 +1,7 @@
 'use client';
 
 import { useI18n } from '@/lib/i18n';
+import { sideDisplayName } from '@/lib/game/controllers';
 import { factionAsset } from '@/lib/game/factions';
 import { totalSoldiers } from '@/lib/game/selectors';
 import type { GameState } from '@/lib/game/types';
@@ -14,12 +15,15 @@ export default function Scoreboard({
   youName: string;
 }) {
   const { t } = useI18n();
+  const leftName = sideDisplayName(state, 'human', youName, t);
+  const rightName = sideDisplayName(state, 'bot', youName, t);
+
   return (
     <div className="score">
       <div className="score__names">
-        <span className="score__name score__name--white">{youName}</span>
+        <span className="score__name score__name--white">{leftName}</span>
         <span className="score__vs">vs</span>
-        <span className="score__name score__name--black">{t('common.bot')}</span>
+        <span className="score__name score__name--black">{rightName}</span>
       </div>
       <div className="score__nums">
         <span className="score__side score__side--human">

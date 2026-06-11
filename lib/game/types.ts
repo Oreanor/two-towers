@@ -2,6 +2,9 @@ import type { FactionId } from './factions';
 
 export type PlayerId = 'human' | 'bot';
 
+/** Who plays a board side: a person or the AI. */
+export type ControllerKind = 'human' | 'ai';
+
 export type Building = 'mainCastle' | 'fort' | null;
 
 export type Cell = {
@@ -25,6 +28,8 @@ export type GameState = {
   winner: PlayerId | null;
   humanFaction: FactionId;
   botFaction: FactionId;
+  humanController: ControllerKind;
+  botController: ControllerKind;
   log: string[];
 };
 

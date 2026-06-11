@@ -26,8 +26,10 @@
     "language": "Язык",
     "logout": "Выход",
     "pickSides": "Выберите стороны",
-    "yourSide": "Вы",
-    "botSide": "Бот",
+    "sideLeft": "Нижний левый угол",
+    "sideRight": "Верхний правый угол",
+    "playerHuman": "Человек",
+    "playerBot": "Бот",
     "startGame": "Начать игру"
   },
   "factions": {
@@ -71,6 +73,8 @@
     "goCount": "Пойдёт",
     "stayCount": "Останется",
     "botThinking": "Бот думает…",
+    "autoBattle": "Автобой…",
+    "autoBattleOver": "Автобой завершён",
     "notFound": "Игра не найдена",
     "toLobby": "В лобби"
   },
@@ -80,7 +84,9 @@
     "winSub": "Замок противника пал",
     "lossSub": "Ваш замок пал",
     "again": "Ещё раз",
-    "viewBoard": "Посмотреть доску"
+    "viewBoard": "Посмотреть доску",
+    "spectatorWin": "Победа: {faction}",
+    "spectatorSub": "Бот против бота"
   },
   "languages": {
     "ru": "Русский",

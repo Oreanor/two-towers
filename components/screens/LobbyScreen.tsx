@@ -8,16 +8,29 @@ import { useI18n } from '@/lib/i18n';
 import AppHeader from '@/components/AppHeader';
 import RulesModal from '@/components/RulesModal';
 import ConfirmModal from '@/components/ConfirmModal';
-import SideSelectModal from '@/components/SideSelectModal';
+import SideSelectModal, { type GameSetup } from '@/components/SideSelectModal';
 import { createInitialState } from '@/lib/game/initialState';
-import { factionAsset, type FactionId } from '@/lib/game/factions';
+import { factionAsset } from '@/lib/game/factions';
 import { startTurn } from '@/lib/game/rules';
+import type { GameState } from '@/lib/game/types';
 import {
   createGame,
   deleteGame,
   listGames,
   type SavedGame,
 } from '@/lib/storage/games';
+
+function matchLabel(state: GameState, t: (key: string) => string): string {
+  const left =
+    state.humanController === 'human'
+      ? t('lobby.playerHuman')
+      : t('lobby.playerBot');
+  const right =
+    state.botController === 'human'
+      ? t('lobby.playerHuman')
+      : t('lobby.playerBot');
+  return `${left} vs ${right}`;
+}
 
 export default function LobbyScreen() {
   const { user, logout } = useAuth();
@@ -28,12 +41,10 @@ export default function LobbyScreen() {
   const [confirmTarget, setConfirmTarget] = useState<SavedGame | null>(null);
   const [sideSelectOpen, setSideSelectOpen] = useState(false);
 
-  // localStorage is unavailable during the server prerender, so load on mount.
   useEffect(() => {
     setGames(listGames());
   }, []);
 
-  // Day + time so two games are still distinguishable.
   const formatWhen = (iso: string) =>
     new Date(iso).toLocaleString(lang, {
       day: 'numeric',
@@ -42,9 +53,17 @@ export default function LobbyScreen() {
       minute: '2-digit',
     });
 
-  const handleCreate = (humanFaction: FactionId, botFaction: FactionId) => {
+  const handleCreate = (setup: GameSetup) => {
     const game = createGame(
-      startTurn(createInitialState(humanFaction, botFaction), 'human'),
+      startTurn(
+        createInitialState(
+          setup.humanFaction,
+          setup.botFaction,
+          setup.humanController,
+          setup.botController,
+        ),
+        'human',
+      ),
     );
     setSideSelectOpen(false);
     router.push(`/play/${game.id}`);
@@ -108,7 +127,9 @@ export default function LobbyScreen() {
                         alt=""
                         draggable={false}
                       />
-                      {t('lobby.vsBot')}
+                      <span className="list__item-mode">
+                        {matchLabel(game.state, t)}
+                      </span>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         className="list__item-shield"
