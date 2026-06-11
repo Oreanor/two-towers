@@ -53,13 +53,18 @@ export default function AmountModal({
         </div>
       </div>
 
+      {/* The track spans the whole pool (0…stayBase) so the thumb sits at the
+          stay/go split — e.g. 2 left + 2 right lands dead centre. The legal
+          range [min,max] is still enforced by clamping the chosen value. */}
       <input
         className="w-full cursor-pointer accent-accent disabled:cursor-default disabled:opacity-60"
         type="range"
-        min={min}
-        max={max}
+        min={0}
+        max={stayBase}
         value={value}
-        onChange={(e) => setValue(Number(e.target.value))}
+        onChange={(e) =>
+          setValue(Math.min(max, Math.max(min, Number(e.target.value))))
+        }
         disabled={min === max}
         aria-label={goLabel}
       />

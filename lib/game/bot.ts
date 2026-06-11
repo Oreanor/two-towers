@@ -22,9 +22,9 @@ import {
 import type { BotAction, Cell, CellRef, GameState } from './types';
 import { FORT_COST } from './constants';
 
-const BOT_FORT_MIN_SOLDIERS = 8;
+const BOT_FORT_MIN_SOLDIERS = 7;
 const BOT_OCCUPY_MIN_SOURCE = 3;
-const MIN_CELLS_BEFORE_FORT = 4;
+const MIN_CELLS_BEFORE_FORT = 3;
 
 /** Reinforce the mobilization point closest to the enemy front. */
 function allocateBotIncome(state: GameState): GameState {
@@ -55,7 +55,9 @@ function allocateBotIncome(state: GameState): GameState {
 
 function attackWeight(target: Cell): number {
   if (target.building === 'mainCastle') return 1000;
-  if (target.building === 'fort') return 12;
+  // Forts are worth taking (deny the enemy a stronghold + income), well above
+  // a plain cell — so the bot won't ignore an empty/weak fort next to it.
+  if (target.building === 'fort') return 50;
   return 10 + target.soldiers;
 }
 
@@ -78,9 +80,15 @@ function scoreFortSite(
 ): number {
   const ref = refOf(cell);
   const distEnemy = minDistToEnemy(state, ref);
-  let score = (8 - distEnemy) * 12;
+  // Strong forward bias: a fort is only useful out toward the enemy.
+  let score = (8 - distEnemy) * 20;
 
-  if (castle && manhattan(ref, refOf(castle)) === 1) score -= 35;
+  if (castle) {
+    const dCastle = manhattan(ref, refOf(castle));
+    // Hugging the castle is pointless; want it at least a cell out.
+    if (dCastle <= 1) score -= 120;
+    else score += Math.min(dCastle, 4) * 6;
+  }
 
   score += (3 - distToCenter(ref)) * 4;
   score += Math.min(cell.soldiers - FORT_COST, 12);
@@ -101,13 +109,20 @@ function pickFortSite(state: GameState): CellRef | null {
   if (owned.length < MIN_CELLS_BEFORE_FORT) return null;
 
   const castle = getMainCastle(state.board, self);
-  const candidates = owned.filter(
+  const allCandidates = owned.filter(
     (cell) =>
       cell.building === null &&
       cell.soldiers >= BOT_FORT_MIN_SOLDIERS &&
       canBuildFort(state, refOf(cell)),
   );
-  if (candidates.length === 0) return null;
+  if (allCandidates.length === 0) return null;
+
+  // Prefer sites at least one cell away from the castle; only fall back to
+  // castle-adjacent ground if nothing further out is available.
+  const forward = allCandidates.filter(
+    (c) => !castle || manhattan(refOf(c), refOf(castle)) >= 2,
+  );
+  const candidates = forward.length > 0 ? forward : allCandidates;
 
   let best: Cell | null = null;
   let bestScore = -Infinity;
@@ -120,15 +135,6 @@ function pickFortSite(state: GameState): CellRef | null {
   }
 
   if (!best || bestScore < 8) return null;
-
-  if (
-    castle &&
-    manhattan(refOf(best), refOf(castle)) === 1 &&
-    candidates.some((c) => manhattan(refOf(c), refOf(castle)) > 1)
-  ) {
-    return null;
-  }
-
   return refOf(best);
 }
 
@@ -141,7 +147,8 @@ function occupySquadSize(state: GameState, source: Cell, target: Cell): number {
     (n) => n.owner === enemy,
   );
   const available = source.soldiers - 1;
-  const desired = nearCenter || enemyNearby ? 5 : 2;
+  // Claim cells with a real garrison, not a lone scout that's instantly retaken.
+  const desired = nearCenter || enemyNearby ? 6 : 3;
   return Math.max(1, Math.min(desired, available));
 }
 
@@ -161,7 +168,10 @@ function attackSquadSize(
 
   if (target.building === 'mainCastle') return maxSend;
 
-  const efficient = needed + Math.min(2, maxSend - needed);
+  // Send enough surplus that the captured cell can hold, not the razor minimum
+  // (forts are worth a little extra). Still keep a rear guard at the source.
+  const margin = target.building === 'fort' ? 6 : 4;
+  const efficient = needed + Math.min(margin, maxSend - needed);
   return Math.min(maxSend, efficient);
 }
 
@@ -228,7 +238,10 @@ function chooseBotAction(state: GameState): BotAction {
       const from = refOf(army);
       const currentDist = minDistToEnemy(state, from);
       const reserve = garrisonReserve(army);
-      const movable = army.soldiers - reserve;
+      let movable = army.soldiers - reserve;
+      // Don't funnel the whole army into a single forward square (the "camping
+      // wall" one cell from the enemy). Leave a rear guard so it spreads out.
+      if (movable > 6) movable = Math.ceil(movable * 0.7);
       if (movable > 0) {
         const step = getNeighbors(state.board, from)
           .filter((n) => n.owner === self)

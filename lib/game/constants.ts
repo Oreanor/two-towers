@@ -1,6 +1,8 @@
 export const BOARD_SIZE = 4;
 
-export const STARTING_SOLDIERS = 3;
+// Castles begin empty; the first turn's income (MAIN_CASTLE_INCOME) seeds them,
+// so each side effectively opens with 3 soldiers.
+export const STARTING_SOLDIERS = 0;
 
 export const MAIN_CASTLE_INCOME = 3;
 export const NORMAL_CELL_INCOME = 1;
