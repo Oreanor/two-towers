@@ -30,12 +30,11 @@ export default function AppHeader({
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          className="topbar__logo"
-          src="/assets/castle2.png"
-          alt=""
+          className="topbar__logo logo-img"
+          src="/assets/logo.png"
+          alt="Two Towers"
           draggable={false}
         />
-        Two Towers
       </button>
       <div className="topbar__right">
         <button

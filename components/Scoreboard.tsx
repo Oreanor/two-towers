@@ -1,6 +1,7 @@
 'use client';
 
 import { useI18n } from '@/lib/i18n';
+import { factionAsset } from '@/lib/game/factions';
 import { totalSoldiers } from '@/lib/game/selectors';
 import type { GameState } from '@/lib/game/types';
 
@@ -21,9 +22,27 @@ export default function Scoreboard({
         <span className="score__name score__name--black">{t('common.bot')}</span>
       </div>
       <div className="score__nums">
-        <strong>{totalSoldiers(state, 'human')}</strong>
+        <span className="score__side score__side--human">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            className="score__shield"
+            src={factionAsset(state.humanFaction, 'shield')}
+            alt=""
+            draggable={false}
+          />
+          <strong>{totalSoldiers(state, 'human')}</strong>
+        </span>
         <span className="score__colon">:</span>
-        <strong>{totalSoldiers(state, 'bot')}</strong>
+        <span className="score__side score__side--bot">
+          <strong>{totalSoldiers(state, 'bot')}</strong>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            className="score__shield"
+            src={factionAsset(state.botFaction, 'shield')}
+            alt=""
+            draggable={false}
+          />
+        </span>
       </div>
     </div>
   );

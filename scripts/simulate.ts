@@ -6,7 +6,10 @@ import { getMainCastle, refOf } from '../lib/game/selectors';
 import { placeIncome } from '../lib/game/rules';
 import type { GameState } from '../lib/game/types';
 
-let state: GameState = startTurn(createInitialState(), 'human');
+let state: GameState = startTurn(
+  createInitialState('gondor', 'mordor'),
+  'human',
+);
 
 for (let i = 0; i < 200 && state.phase !== 'gameOver'; i++) {
   if (state.currentPlayer === 'human') {

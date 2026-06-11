@@ -4,6 +4,7 @@ import {
   HUMAN_START,
   STARTING_SOLDIERS,
 } from './constants';
+import type { FactionId } from './factions';
 import type { Board, GameState } from './types';
 
 export function createInitialBoard(): Board {
@@ -32,7 +33,10 @@ export function createInitialBoard(): Board {
   return board;
 }
 
-export function createInitialState(): GameState {
+export function createInitialState(
+  humanFaction: FactionId,
+  botFaction: FactionId,
+): GameState {
   return {
     board: createInitialBoard(),
     currentPlayer: 'human',
@@ -40,6 +44,8 @@ export function createInitialState(): GameState {
     round: 1,
     pendingIncome: 0,
     winner: null,
+    humanFaction,
+    botFaction,
     log: ['Game started. Human moves first.'],
   };
 }

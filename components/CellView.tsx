@@ -1,22 +1,29 @@
 import type { Cell } from '@/lib/game/types';
+import { factionAsset, soldierSpriteAdjust, type FactionId } from '@/lib/game/factions';
 
 type Props = {
   cell: Cell;
+  humanFaction: FactionId;
+  botFaction: FactionId;
   isSelected: boolean;
   isLegalTarget: boolean;
   isMobilizationTarget: boolean;
   onClick: () => void;
 };
 
-/** Asset suffix per side: blue (2) is the human player, red (1) the bot. */
-function sideOf(cell: Cell): string {
-  return cell.owner === 'human' ? '2' : '1';
+function factionOf(
+  cell: Cell,
+  humanFaction: FactionId,
+  botFaction: FactionId,
+): FactionId | null {
+  if (cell.owner === 'human') return humanFaction;
+  if (cell.owner === 'bot') return botFaction;
+  return null;
 }
 
-function buildingImage(cell: Cell): string | null {
-  if (cell.owner === null) return null;
-  if (cell.building === 'mainCastle') return `/assets/castle${sideOf(cell)}.png`;
-  if (cell.building === 'fort') return `/assets/fort${sideOf(cell)}.png`;
+function buildingImage(cell: Cell, faction: FactionId): string | null {
+  if (cell.building === 'mainCastle') return factionAsset(faction, 'castle');
+  if (cell.building === 'fort') return factionAsset(faction, 'fort');
   return null;
 }
 
@@ -54,6 +61,8 @@ function armyLayout(soldiers: number) {
 
 export default function CellView({
   cell,
+  humanFaction,
+  botFaction,
   isSelected,
   isLegalTarget,
   isMobilizationTarget,
@@ -72,7 +81,15 @@ export default function CellView({
       : isMobilizationTarget
         ? ' cell--mobilize'
         : '';
-  const building = buildingImage(cell);
+  const building =
+    cell.owner !== null
+      ? buildingImage(cell, factionOf(cell, humanFaction, botFaction)!)
+      : null;
+  const faction =
+    cell.owner !== null ? factionOf(cell, humanFaction, botFaction)! : null;
+  const soldierAdj = faction
+    ? soldierSpriteAdjust(faction, cell.owner === 'human')
+    : { scale: 1, offsetX: 0 };
   const isArmy = !building && cell.owner !== null && cell.soldiers > 0;
   // Both soldier sprites face the same way; mirror the human's so the armies
   // face each other (human marches from bottom-left toward the bot's corner).
@@ -84,7 +101,7 @@ export default function CellView({
         // eslint-disable-next-line @next/next/no-img-element
         <img className="cell__img" src={building} alt="" draggable={false} />
       )}
-      {isArmy && (
+      {isArmy && faction && (
         <div className={`cell__army${flip}`} aria-hidden="true">
           {armyLayout(cell.soldiers).map((p, i) => (
             // eslint-disable-next-line @next/next/no-img-element
@@ -95,8 +112,13 @@ export default function CellView({
                 left: `${p.left}%`,
                 bottom: `${p.bottom}%`,
                 zIndex: p.z,
+                width: `${ICON_W * soldierAdj.scale}%`,
+                transform:
+                  soldierAdj.offsetX !== 0
+                    ? `translateX(${soldierAdj.offsetX}%)`
+                    : undefined,
               }}
-              src={`/assets/soldier${sideOf(cell)}.png`}
+              src={factionAsset(faction, 'soldier')}
               alt=""
               draggable={false}
             />

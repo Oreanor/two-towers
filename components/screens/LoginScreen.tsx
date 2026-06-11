@@ -25,14 +25,21 @@ export default function LoginScreen() {
 
   return (
     <div className="screen screen--center">
-      <div className="hero">
-        <div className="hero__towers" aria-hidden="true">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/assets/castle2.png" alt="" draggable={false} />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/assets/castle1.png" alt="" draggable={false} />
-        </div>
-        <h1>{t('login.title')}</h1>
+      <div className="login-splash" aria-hidden="true">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          className="login-splash__pic"
+          src="/assets/pic.png"
+          alt=""
+          draggable={false}
+        />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          className="login-splash__logo"
+          src="/assets/logo.png"
+          alt=""
+          draggable={false}
+        />
       </div>
 
       <div className="stack">

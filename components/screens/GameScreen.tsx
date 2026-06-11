@@ -13,6 +13,7 @@ import { useI18n } from '@/lib/i18n';
 import { executeBotTurn } from '@/lib/game/bot';
 import { FORT_COST } from '@/lib/game/constants';
 import { createInitialState } from '@/lib/game/initialState';
+import { resolveFactions } from '@/lib/game/factions';
 import {
   attackCell,
   buildFort,
@@ -44,8 +45,9 @@ import {
 
 const BOT_TURN_DELAY_MS = 600;
 
-function newGame(): GameState {
-  return startTurn(createInitialState(), 'human');
+function newGame(prev: GameState): GameState {
+  const { humanFaction, botFaction } = resolveFactions(prev);
+  return startTurn(createInitialState(humanFaction, botFaction), 'human');
 }
 
 export default function GameScreen({ gameId }: { gameId: string }) {
@@ -65,7 +67,16 @@ export default function GameScreen({ gameId }: { gameId: string }) {
   const [resultClosed, setResultClosed] = useState(false);
 
   useEffect(() => {
-    setEnvelope(getGame(gameId));
+    const game = getGame(gameId);
+    if (game) {
+      const { humanFaction, botFaction } = resolveFactions(game.state);
+      setEnvelope({
+        ...game,
+        state: { ...game.state, humanFaction, botFaction },
+      });
+    } else {
+      setEnvelope(null);
+    }
     setLoaded(true);
   }, [gameId]);
 
@@ -212,7 +223,7 @@ export default function GameScreen({ gameId }: { gameId: string }) {
     setResultClosed(false);
     setEnvelope((prev) =>
       prev
-        ? saveGame({ ...prev, state: newGame(), resultRecorded: false })
+        ? saveGame({ ...prev, state: newGame(prev.state), resultRecorded: false })
         : prev,
     );
   }

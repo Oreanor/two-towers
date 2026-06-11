@@ -24,7 +24,19 @@
     "settings": "Настройки",
     "theme": "Тема",
     "language": "Язык",
-    "logout": "Выход"
+    "logout": "Выход",
+    "pickSides": "Выберите стороны",
+    "yourSide": "Вы",
+    "botSide": "Бот",
+    "startGame": "Начать игру"
+  },
+  "factions": {
+    "dwarves": "Гномы",
+    "elves": "Эльфы",
+    "gondor": "Гондор",
+    "isengard": "Изенгард",
+    "mordor": "Мордор",
+    "rohan": "Рохан"
   },
   "status": {
     "active": "идёт партия",

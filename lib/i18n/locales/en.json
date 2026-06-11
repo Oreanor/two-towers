@@ -24,7 +24,19 @@
     "settings": "Settings",
     "theme": "Theme",
     "language": "Language",
-    "logout": "Sign out"
+    "logout": "Sign out",
+    "pickSides": "Choose sides",
+    "yourSide": "You",
+    "botSide": "Bot",
+    "startGame": "Start game"
+  },
+  "factions": {
+    "dwarves": "Dwarves",
+    "elves": "Elves",
+    "gondor": "Gondor",
+    "isengard": "Isengard",
+    "mordor": "Mordor",
+    "rohan": "Rohan"
   },
   "status": {
     "active": "in progress",

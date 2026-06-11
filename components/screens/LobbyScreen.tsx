@@ -8,7 +8,9 @@ import { useI18n } from '@/lib/i18n';
 import AppHeader from '@/components/AppHeader';
 import RulesModal from '@/components/RulesModal';
 import ConfirmModal from '@/components/ConfirmModal';
+import SideSelectModal from '@/components/SideSelectModal';
 import { createInitialState } from '@/lib/game/initialState';
+import { factionAsset, type FactionId } from '@/lib/game/factions';
 import { startTurn } from '@/lib/game/rules';
 import {
   createGame,
@@ -24,6 +26,7 @@ export default function LobbyScreen() {
   const [games, setGames] = useState<SavedGame[]>([]);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [confirmTarget, setConfirmTarget] = useState<SavedGame | null>(null);
+  const [sideSelectOpen, setSideSelectOpen] = useState(false);
 
   // localStorage is unavailable during the server prerender, so load on mount.
   useEffect(() => {
@@ -39,8 +42,11 @@ export default function LobbyScreen() {
       minute: '2-digit',
     });
 
-  const handleCreate = () => {
-    const game = createGame(startTurn(createInitialState(), 'human'));
+  const handleCreate = (humanFaction: FactionId, botFaction: FactionId) => {
+    const game = createGame(
+      startTurn(createInitialState(humanFaction, botFaction), 'human'),
+    );
+    setSideSelectOpen(false);
     router.push(`/play/${game.id}`);
   };
 
@@ -63,7 +69,7 @@ export default function LobbyScreen() {
 
       <button
         className="btn btn--primary btn--block btn--icon-text"
-        onClick={handleCreate}
+        onClick={() => setSideSelectOpen(true)}
       >
         <Plus size={18} />
         {t('lobby.create')}
@@ -91,7 +97,29 @@ export default function LobbyScreen() {
                     <Play size={16} />
                   </span>
                   <span className="list__item-info">
-                    <span className="who__name">{t('lobby.vsBot')}</span>
+                    <span className="who__name list__item-match">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        className="list__item-shield"
+                        src={factionAsset(
+                          game.state.humanFaction ?? 'gondor',
+                          'shield',
+                        )}
+                        alt=""
+                        draggable={false}
+                      />
+                      {t('lobby.vsBot')}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        className="list__item-shield"
+                        src={factionAsset(
+                          game.state.botFaction ?? 'mordor',
+                          'shield',
+                        )}
+                        alt=""
+                        draggable={false}
+                      />
+                    </span>
                     <span className="muted tiny">
                       {gameStatusLabel(game)} · {formatWhen(game.createdAt)}
                     </span>
@@ -110,6 +138,13 @@ export default function LobbyScreen() {
           </ul>
         )}
       </section>
+
+      {sideSelectOpen && (
+        <SideSelectModal
+          onConfirm={handleCreate}
+          onClose={() => setSideSelectOpen(false)}
+        />
+      )}
 
       {confirmTarget && (
         <ConfirmModal

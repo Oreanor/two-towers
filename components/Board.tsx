@@ -27,6 +27,8 @@ export default function Board({
           <CellView
             key={`${cell.row}-${cell.col}`}
             cell={cell}
+            humanFaction={state.humanFaction}
+            botFaction={state.botFaction}
             isSelected={
               selected !== null &&
               selected.row === cell.row &&

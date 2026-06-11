@@ -1,3 +1,5 @@
+import type { FactionId } from './factions';
+
 export type PlayerId = 'human' | 'bot';
 
 export type Building = 'mainCastle' | 'fort' | null;
@@ -21,6 +23,8 @@ export type GameState = {
   round: number;
   pendingIncome: number;
   winner: PlayerId | null;
+  humanFaction: FactionId;
+  botFaction: FactionId;
   log: string[];
 };
 
