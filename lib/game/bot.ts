@@ -11,6 +11,7 @@ import {
   placeIncome,
 } from './rules';
 import {
+  getMainCastle,
   getMobilizationCells,
   getNeighbors,
   getPlayerCells,
@@ -18,10 +19,12 @@ import {
   opponentOf,
   refOf,
 } from './selectors';
-import type { BotAction, Cell, GameState } from './types';
+import type { BotAction, Cell, CellRef, GameState } from './types';
+import { FORT_COST } from './constants';
 
 const BOT_FORT_MIN_SOLDIERS = 8;
 const BOT_OCCUPY_MIN_SOURCE = 3;
+const MIN_CELLS_BEFORE_FORT = 4;
 
 /** Reinforce the mobilization point closest to the enemy front. */
 export function allocateBotIncome(state: GameState): GameState {
@@ -52,8 +55,81 @@ export function allocateBotIncome(state: GameState): GameState {
 
 function attackWeight(target: Cell): number {
   if (target.building === 'mainCastle') return 1000;
-  if (target.building === 'fort') return 20;
+  if (target.building === 'fort') return 12;
   return 10 + target.soldiers;
+}
+
+function minDistToEnemy(state: GameState, ref: CellRef): number {
+  const enemy = opponentOf(state.currentPlayer);
+  const enemyCells = getPlayerCells(state.board, enemy);
+  if (enemyCells.length === 0) return 99;
+  return Math.min(...enemyCells.map((h) => manhattan(ref, refOf(h))));
+}
+
+function distToCenter(ref: CellRef): number {
+  return Math.abs(ref.row - 1.5) + Math.abs(ref.col - 1.5);
+}
+
+/** Prefer forward / central forts; penalise redundant forts hugging the castle. */
+function scoreFortSite(
+  state: GameState,
+  cell: Cell,
+  castle: Cell | undefined,
+): number {
+  const ref = refOf(cell);
+  const distEnemy = minDistToEnemy(state, ref);
+  let score = (8 - distEnemy) * 12;
+
+  if (castle && manhattan(ref, refOf(castle)) === 1) score -= 35;
+
+  score += (3 - distToCenter(ref)) * 4;
+  score += Math.min(cell.soldiers - FORT_COST, 12);
+
+  const forts = getPlayerCells(state.board, state.currentPlayer).filter(
+    (c) => c.building === 'fort',
+  );
+  for (const fort of forts) {
+    if (manhattan(ref, refOf(fort)) <= 1) score -= 20;
+  }
+
+  return score;
+}
+
+function pickFortSite(state: GameState): CellRef | null {
+  const self = state.currentPlayer;
+  const owned = getPlayerCells(state.board, self);
+  if (owned.length < MIN_CELLS_BEFORE_FORT) return null;
+
+  const castle = getMainCastle(state.board, self);
+  const candidates = owned.filter(
+    (cell) =>
+      cell.building === null &&
+      cell.soldiers >= BOT_FORT_MIN_SOLDIERS &&
+      canBuildFort(state, refOf(cell)),
+  );
+  if (candidates.length === 0) return null;
+
+  let best: Cell | null = null;
+  let bestScore = -Infinity;
+  for (const cell of candidates) {
+    const score = scoreFortSite(state, cell, castle);
+    if (score > bestScore) {
+      bestScore = score;
+      best = cell;
+    }
+  }
+
+  if (!best || bestScore < 8) return null;
+
+  if (
+    castle &&
+    manhattan(refOf(best), refOf(castle)) === 1 &&
+    candidates.some((c) => manhattan(refOf(c), refOf(castle)) > 1)
+  ) {
+    return null;
+  }
+
+  return refOf(best);
 }
 
 function occupySquadSize(state: GameState, source: Cell, target: Cell): number {
@@ -69,6 +145,26 @@ function occupySquadSize(state: GameState, source: Cell, target: Cell): number {
   return Math.max(1, Math.min(desired, available));
 }
 
+function garrisonReserve(cell: Cell): number {
+  return cell.building !== null ? 1 : 0;
+}
+
+/** Send enough to win, not the whole stack (unless the target is the main castle). */
+function attackSquadSize(
+  state: GameState,
+  source: Cell,
+  target: Cell,
+): number | null {
+  const needed = effectiveDefense(target) + 1;
+  const maxSend = source.soldiers - garrisonReserve(source);
+  if (maxSend < needed) return null;
+
+  if (target.building === 'mainCastle') return maxSend;
+
+  const efficient = needed + Math.min(2, maxSend - needed);
+  return Math.min(maxSend, efficient);
+}
+
 export function chooseBotAction(state: GameState): BotAction {
   const self = state.currentPlayer;
   const enemy = opponentOf(self);
@@ -80,10 +176,8 @@ export function chooseBotAction(state: GameState): BotAction {
   for (const source of ownCells) {
     for (const target of getNeighbors(state.board, refOf(source))) {
       if (target.owner !== enemy) continue;
-      const needed = effectiveDefense(target) + 1;
-      const sent =
-        source.building !== null ? source.soldiers - 1 : source.soldiers;
-      if (sent < needed) continue;
+      const sent = attackSquadSize(state, source, target);
+      if (sent === null) continue;
       if (!canAttack(state, refOf(source), refOf(target), sent)) continue;
       const weight = attackWeight(target);
       if (weight > bestWeight) {
@@ -107,11 +201,11 @@ export function chooseBotAction(state: GameState): BotAction {
       if (target.owner !== null) continue;
       const squad = occupySquadSize(state, source, target);
       if (!canOccupy(state, refOf(source), refOf(target), squad)) continue;
-      const dist =
+      const distEnemy =
         enemyCells.length === 0
           ? 0
           : Math.min(...enemyCells.map((h) => manhattan(refOf(target), refOf(h))));
-      const score = 100 - dist;
+      const score = 100 - distEnemy * 8 + (3 - distToCenter(refOf(target))) * 3;
       if (score > bestOccupyScore) {
         bestOccupyScore = score;
         bestOccupy = {
@@ -125,35 +219,33 @@ export function chooseBotAction(state: GameState): BotAction {
   }
   if (bestOccupy) return bestOccupy;
 
-  const fortCell = ownCells.find(
-    (cell) =>
-      cell.building === null &&
-      cell.soldiers >= BOT_FORT_MIN_SOLDIERS &&
-      canBuildFort(state, refOf(cell)),
-  );
-  if (fortCell) return { type: 'buildFort', cell: refOf(fortCell) };
+  const fortRef = pickFortSite(state);
+  if (fortRef) return { type: 'buildFort', cell: fortRef };
 
   if (enemyCells.length > 0) {
     const army = [...ownCells].sort((a, b) => b.soldiers - a.soldiers)[0];
     if (army && army.soldiers > 1) {
-      const currentDist = Math.min(
-        ...enemyCells.map((h) => manhattan(refOf(army), refOf(h))),
-      );
-      const step = getNeighbors(state.board, refOf(army))
-        .filter((n) => n.owner === self)
-        .find(
-          (n) =>
-            Math.min(...enemyCells.map((h) => manhattan(refOf(n), refOf(h)))) <
-            currentDist,
-        );
-      if (step) {
-        const soldiers = Math.floor(army.soldiers / 2);
-        if (soldiers > 0) {
+      const from = refOf(army);
+      const currentDist = minDistToEnemy(state, from);
+      const reserve = garrisonReserve(army);
+      const movable = army.soldiers - reserve;
+      if (movable > 0) {
+        const step = getNeighbors(state.board, from)
+          .filter((n) => n.owner === self)
+          .sort((a, b) => {
+            const da = minDistToEnemy(state, refOf(a));
+            const db = minDistToEnemy(state, refOf(b));
+            if (da !== db) return da - db;
+            return distToCenter(refOf(a)) - distToCenter(refOf(b));
+          })
+          .find((n) => minDistToEnemy(state, refOf(n)) < currentDist);
+
+        if (step) {
           return {
             type: 'move',
-            from: refOf(army),
+            from,
             to: refOf(step),
-            soldiers,
+            soldiers: movable,
           };
         }
       }

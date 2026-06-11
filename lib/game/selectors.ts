@@ -45,6 +45,11 @@ export function getMobilizationCells(board: Board, player: PlayerId): Cell[] {
   );
 }
 
+/** True when income can only go to the main castle (no forts yet). */
+export function incomeTargetIsCastleOnly(board: Board, player: PlayerId): boolean {
+  return getMobilizationCells(board, player).length === 1;
+}
+
 export function getMainCastle(board: Board, player: PlayerId): Cell | undefined {
   return board
     .flat()

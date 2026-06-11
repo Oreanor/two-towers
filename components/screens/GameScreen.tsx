@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AmountModal from '@/components/AmountModal';
 import AppHeader from '@/components/AppHeader';
@@ -41,6 +41,7 @@ import {
   getCell,
   getMobilizationCells,
   getNeighbors,
+  incomeTargetIsCastleOnly,
   opponentOf,
   refOf,
 } from '@/lib/game/selectors';
@@ -91,6 +92,7 @@ export default function GameScreen({ gameId }: { gameId: string }) {
   const [selected, setSelected] = useState<CellRef | null>(null);
   const [pendingTarget, setPendingTarget] = useState<CellRef | null>(null);
   const [allocTarget, setAllocTarget] = useState<CellRef | null>(null);
+  const autoAllocTurnRef = useRef<string | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [resultClosed, setResultClosed] = useState(false);
 
@@ -167,8 +169,24 @@ export default function GameScreen({ gameId }: { gameId: string }) {
 
   const mobilizationTargets = useMemo(() => {
     if (!state || !isUserAllocating || !activePlayer) return [];
+    if (incomeTargetIsCastleOnly(state.board, activePlayer)) return [];
     return getMobilizationCells(state.board, activePlayer).map(refOf);
   }, [state, isUserAllocating, activePlayer]);
+
+  useEffect(() => {
+    if (!state || state.phase !== 'allocate' || !isUserTurn) return;
+    if (!incomeTargetIsCastleOnly(state.board, state.currentPlayer)) return;
+    if (state.pendingIncome <= 0) return;
+
+    const turnKey = `${state.round}-${state.currentPlayer}`;
+    if (autoAllocTurnRef.current === turnKey) return;
+    autoAllocTurnRef.current = turnKey;
+
+    const castle = getMobilizationCells(state.board, state.currentPlayer)[0];
+    updateState((s) =>
+      placeIncome(s, refOf(castle), s.pendingIncome),
+    );
+  }, [state, isUserTurn, updateState]);
 
   function finishUserAction(next: GameState) {
     setSelected(null);
@@ -181,6 +199,7 @@ export default function GameScreen({ gameId }: { gameId: string }) {
       return;
 
     if (isUserAllocating) {
+      if (incomeTargetIsCastleOnly(state.board, activePlayer)) return;
       if (canPlaceIncome(state, ref)) setAllocTarget(ref);
       return;
     }
@@ -242,6 +261,7 @@ export default function GameScreen({ gameId }: { gameId: string }) {
     setSelected(null);
     setPendingTarget(null);
     setAllocTarget(null);
+    autoAllocTurnRef.current = null;
     setResultClosed(false);
     setEnvelope((prev) =>
       prev

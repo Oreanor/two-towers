@@ -843,27 +843,46 @@ body {
   position: absolute;
   inset: 10.4%;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  grid-template-rows: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  place-items: stretch;
 }
 
 /* board cells: transparent — the parchment draws the squares */
 .cell {
   position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
   padding: 0;
+  margin: 0;
   border: none;
   border-radius: 8px;
   background: transparent;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  color: inherit;
   transition: box-shadow 0.12s ease;
 }
-.cell--human {
+.cell--human::before,
+.cell--bot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+}
+.cell--human::before {
   background: rgba(74, 144, 217, 0.45);
 }
-.cell--bot {
+.cell--bot::before {
   background: rgba(214, 69, 69, 0.45);
 }
 .cell--selected {
@@ -876,6 +895,10 @@ body {
   box-shadow: inset 0 0 0 3px var(--accent);
 }
 .cell__img {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  box-sizing: border-box;
   width: 100%;
   height: 100%;
   object-fit: contain;
@@ -887,6 +910,7 @@ body {
 .cell__army {
   position: absolute;
   inset: 0;
+  z-index: 1;
   overflow: hidden;
   border-radius: inherit;
 }
