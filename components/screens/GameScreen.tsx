@@ -161,6 +161,11 @@ export default function GameScreen({ gameId }: { gameId: string }) {
   useEffect(() => {
     if (!state || state.phase === 'gameOver') return;
     if (!isAiControlled(state, state.currentPlayer)) return;
+    // Hold the bot's next move until the current move's animation has fully
+    // played out — otherwise (esp. bot vs bot) moves commit faster than the
+    // ~1s slide and the animations visibly skip. The effect re-runs when
+    // moveAnim clears.
+    if (moveAnim) return;
     const snapshot = state;
     const afterRemaining = Math.max(
       0,
@@ -179,7 +184,7 @@ export default function GameScreen({ gameId }: { gameId: string }) {
       lastAiCommitRef.current = Date.now();
     }, afterRemaining + beforeDelay);
     return () => clearTimeout(timer);
-  }, [state, updateState, addIncomeFloat]);
+  }, [state, moveAnim, updateState, addIncomeFloat]);
 
   useEffect(() => {
     if (state?.phase !== 'gameOver') setResultClosed(false);

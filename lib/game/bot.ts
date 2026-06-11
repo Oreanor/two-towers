@@ -68,6 +68,12 @@ function minDistToEnemy(state: GameState, ref: CellRef): number {
   return Math.min(...enemyCells.map((h) => manhattan(ref, refOf(h))));
 }
 
+/** The enemy main castle — the bot's actual objective. */
+function enemyCastleRef(state: GameState): CellRef | null {
+  const castle = getMainCastle(state.board, opponentOf(state.currentPlayer));
+  return castle ? refOf(castle) : null;
+}
+
 function distToCenter(ref: CellRef): number {
   return Math.abs(ref.row - 1.5) + Math.abs(ref.col - 1.5);
 }
@@ -175,12 +181,26 @@ function attackSquadSize(
   return Math.min(maxSend, efficient);
 }
 
-function chooseBotAction(state: GameState): BotAction {
+/** A small trade — the kind that drags a bot-vs-bot game into a stalemate. */
+function isPettyAction(action: BotAction): boolean {
+  return (
+    (action.type === 'attack' || action.type === 'occupy') &&
+    action.soldiers <= 3
+  );
+}
+
+/**
+ * `breakthrough` is set after several petty trades in a row: the bot then
+ * refuses the small attack/occupy trades and instead masses its army at the
+ * enemy castle until it can force a real result.
+ */
+function chooseBotAction(state: GameState, breakthrough: boolean): BotAction {
   const self = state.currentPlayer;
   const enemy = opponentOf(self);
   const ownCells = getPlayerCells(state.board, self);
-  const enemyCells = getPlayerCells(state.board, enemy);
 
+  // Attacks: always allowed against buildings (forts/castle) and decisive
+  // strikes; in breakthrough we drop the tiny ≤3-soldier trades on plain cells.
   let bestAttack: BotAction | null = null;
   let bestWeight = -1;
   for (const source of ownCells) {
@@ -189,6 +209,7 @@ function chooseBotAction(state: GameState): BotAction {
       const sent = attackSquadSize(state, source, target);
       if (sent === null) continue;
       if (!canAttack(state, refOf(source), refOf(target), sent)) continue;
+      if (breakthrough && sent <= 3 && target.building === null) continue;
       const weight = attackWeight(target);
       if (weight > bestWeight) {
         bestWeight = weight;
@@ -203,66 +224,78 @@ function chooseBotAction(state: GameState): BotAction {
   }
   if (bestAttack) return bestAttack;
 
-  let bestOccupy: BotAction | null = null;
-  let bestOccupyScore = -1;
-  for (const source of ownCells) {
-    if (source.soldiers < BOT_OCCUPY_MIN_SOURCE) continue;
-    for (const target of getNeighbors(state.board, refOf(source))) {
-      if (target.owner !== null) continue;
-      const squad = occupySquadSize(state, source, target);
-      if (!canOccupy(state, refOf(source), refOf(target), squad)) continue;
-      const distEnemy =
-        enemyCells.length === 0
-          ? 0
-          : Math.min(...enemyCells.map((h) => manhattan(refOf(target), refOf(h))));
-      const score = 100 - distEnemy * 8 + (3 - distToCenter(refOf(target))) * 3;
-      if (score > bestOccupyScore) {
-        bestOccupyScore = score;
-        bestOccupy = {
-          type: 'occupy',
-          from: refOf(source),
-          to: refOf(target),
-          soldiers: squad,
-        };
+  // PUSH the army toward the enemy castle as a single mass — this comes before
+  // grabbing empty side cells, so a big "tank" presses the enemy instead of
+  // dribbling itself away. Onto own ground it moves; onto empty ground toward
+  // the castle it rolls the whole stack (not a small squad).
+  const castle = enemyCastleRef(state);
+  if (castle) {
+    let bestPush: BotAction | null = null;
+    let bestPushScore = -1;
+    for (const source of ownCells) {
+      const reserve = garrisonReserve(source);
+      let mass = source.soldiers - reserve;
+      if (mass <= 0) continue;
+      if (!breakthrough && mass > 6) mass = Math.ceil(mass * 0.7);
+      const sDist = manhattan(refOf(source), castle);
+      for (const n of getNeighbors(state.board, refOf(source))) {
+        const nDist = manhattan(refOf(n), castle);
+        if (nDist >= sDist) continue; // must close on the castle
+        let cand: BotAction | null = null;
+        if (n.owner === self) {
+          cand = { type: 'move', from: refOf(source), to: refOf(n), soldiers: mass };
+        } else if (n.owner === null) {
+          const retakeable = getNeighbors(state.board, refOf(n)).some(
+            (e) => e.owner === enemy && e.soldiers - garrisonReserve(e) > mass,
+          );
+          if (retakeable) continue;
+          if (!canOccupy(state, refOf(source), refOf(n), mass)) continue;
+          cand = { type: 'occupy', from: refOf(source), to: refOf(n), soldiers: mass };
+        } else {
+          continue; // enemy cell — already considered by the attack pass
+        }
+        const score = mass * 10 + (8 - nDist) * 3;
+        if (score > bestPushScore) {
+          bestPushScore = score;
+          bestPush = cand;
+        }
       }
     }
+    if (bestPush) return bestPush;
   }
-  if (bestOccupy) return bestOccupy;
 
   const fortRef = pickFortSite(state);
   if (fortRef) return { type: 'buildFort', cell: fortRef };
 
-  if (enemyCells.length > 0) {
-    const army = [...ownCells].sort((a, b) => b.soldiers - a.soldiers)[0];
-    if (army && army.soldiers > 1) {
-      const from = refOf(army);
-      const currentDist = minDistToEnemy(state, from);
-      const reserve = garrisonReserve(army);
-      let movable = army.soldiers - reserve;
-      // Don't funnel the whole army into a single forward square (the "camping
-      // wall" one cell from the enemy). Leave a rear guard so it spreads out.
-      if (movable > 6) movable = Math.ceil(movable * 0.7);
-      if (movable > 0) {
-        const step = getNeighbors(state.board, from)
-          .filter((n) => n.owner === self)
-          .sort((a, b) => {
-            const da = minDistToEnemy(state, refOf(a));
-            const db = minDistToEnemy(state, refOf(b));
-            if (da !== db) return da - db;
-            return distToCenter(refOf(a)) - distToCenter(refOf(b));
-          })
-          .find((n) => minDistToEnemy(state, refOf(n)) < currentDist);
-
-        if (step) {
-          return {
-            type: 'move',
-            from,
-            to: refOf(step),
-            soldiers: movable,
+  // Lowest priority: claim a little side territory for income with a spare
+  // squad — never in breakthrough, never into a cell the enemy can retake.
+  if (!breakthrough) {
+    let bestOccupy: BotAction | null = null;
+    let bestOccupyScore = -1;
+    for (const source of ownCells) {
+      if (source.soldiers < BOT_OCCUPY_MIN_SOURCE) continue;
+      for (const target of getNeighbors(state.board, refOf(source))) {
+        if (target.owner !== null) continue;
+        const squad = occupySquadSize(state, source, target);
+        if (!canOccupy(state, refOf(source), refOf(target), squad)) continue;
+        const retakeable = getNeighbors(state.board, refOf(target)).some(
+          (n) => n.owner === enemy && n.soldiers - garrisonReserve(n) > squad,
+        );
+        if (retakeable) continue;
+        const dCastle = castle ? manhattan(refOf(target), castle) : 0;
+        const score = 100 - dCastle * 8 + (3 - distToCenter(refOf(target))) * 3;
+        if (score > bestOccupyScore) {
+          bestOccupyScore = score;
+          bestOccupy = {
+            type: 'occupy',
+            from: refOf(source),
+            to: refOf(target),
+            soldiers: squad,
           };
         }
       }
     }
+    if (bestOccupy) return bestOccupy;
   }
 
   return { type: 'pass' };
@@ -271,7 +304,14 @@ function chooseBotAction(state: GameState): BotAction {
 /** Full AI turn for whoever is `state.currentPlayer`. */
 export function executeBotTurn(state: GameState): GameState {
   let next = allocateBotIncome(state);
-  const action = chooseBotAction(next);
+  const stall = state.aiStall ?? 0;
+  const breakthrough = stall >= 3;
+  const action = chooseBotAction(next, breakthrough);
+  // After forcing a breakthrough, reset; otherwise count consecutive petty trades.
+  next = {
+    ...next,
+    aiStall: breakthrough ? 0 : isPettyAction(action) ? stall + 1 : 0,
+  };
   const who = state.currentPlayer === 'human' ? 'Human' : 'Bot';
 
   switch (action.type) {

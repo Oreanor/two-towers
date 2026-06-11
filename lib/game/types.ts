@@ -43,6 +43,8 @@ export type GameState = {
   humanController: ControllerKind;
   botController: ControllerKind;
   lastMove?: LastMove | null;
+  /** Consecutive "petty trade" bot turns; at 3 the AI switches to breakthrough. */
+  aiStall?: number;
   log: string[];
 };
 
