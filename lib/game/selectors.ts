@@ -50,6 +50,16 @@ export function incomeTargetIsCastleOnly(board: Board, player: PlayerId): boolea
   return getMobilizationCells(board, player).length === 1;
 }
 
+/** Income that auto-lands on the castle when there are no forts yet. */
+export function autoCastleIncome(
+  state: GameState,
+): { ref: CellRef; amount: number } | null {
+  if (state.phase !== 'allocate' || state.pendingIncome <= 0) return null;
+  if (!incomeTargetIsCastleOnly(state.board, state.currentPlayer)) return null;
+  const castle = getMobilizationCells(state.board, state.currentPlayer)[0];
+  return { ref: refOf(castle), amount: state.pendingIncome };
+}
+
 export function getMainCastle(board: Board, player: PlayerId): Cell | undefined {
   return board
     .flat()

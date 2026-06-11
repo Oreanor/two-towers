@@ -19,6 +19,18 @@ export type Board = Cell[][];
 
 export type Phase = 'allocate' | 'action' | 'gameOver';
 
+export type MoveKind = 'move' | 'occupy' | 'attack';
+
+/** The most recent troop movement, surfaced so the UI can animate it. `id`
+ *  makes otherwise-identical moves distinguishable so the animation retriggers. */
+export type LastMove = {
+  id: number;
+  from: CellRef;
+  to: CellRef;
+  player: PlayerId;
+  kind: MoveKind;
+};
+
 export type GameState = {
   board: Board;
   currentPlayer: PlayerId;
@@ -30,6 +42,7 @@ export type GameState = {
   botFaction: FactionId;
   humanController: ControllerKind;
   botController: ControllerKind;
+  lastMove?: LastMove | null;
   log: string[];
 };
 

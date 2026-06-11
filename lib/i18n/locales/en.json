@@ -24,6 +24,9 @@
     "settings": "Settings",
     "theme": "Theme",
     "language": "Language",
+    "boardView": "Board",
+    "view2d": "2D",
+    "view3d": "3D",
     "logout": "Sign out",
     "pickSides": "Choose sides",
     "sideLeft": "Lower-left corner",
@@ -76,7 +79,8 @@
     "autoBattle": "Auto battle…",
     "autoBattleOver": "Auto battle finished",
     "notFound": "Game not found",
-    "toLobby": "To lobby"
+    "toLobby": "To lobby",
+    "rotateBoard": "Rotate board"
   },
   "result": {
     "win": "🎉 You won!",

@@ -1,15 +1,18 @@
 'use client';
 
+import { RotateCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AmountModal from '@/components/AmountModal';
 import AppHeader from '@/components/AppHeader';
-import Board from '@/components/Board';
+import Board, { type MoveAnim } from '@/components/Board';
+import IsoBoard from '@/components/IsoBoard';
 import ResultModal from '@/components/ResultModal';
 import RulesModal from '@/components/RulesModal';
 import Scoreboard from '@/components/Scoreboard';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { useI18n } from '@/lib/i18n';
+import { useBoardView } from '@/lib/view';
 import { executeBotTurn } from '@/lib/game/bot';
 import {
   controllerOf,
@@ -20,6 +23,10 @@ import {
   statsResultForHuman,
 } from '@/lib/game/controllers';
 import { FORT_COST } from '@/lib/game/constants';
+import {
+  nextRotation,
+  type BoardRotation,
+} from '@/lib/game/boardRotation';
 import { createInitialState } from '@/lib/game/initialState';
 import { resolveFactions } from '@/lib/game/factions';
 import {
@@ -38,6 +45,7 @@ import {
   startTurn,
 } from '@/lib/game/rules';
 import {
+  autoCastleIncome,
   getCell,
   getMobilizationCells,
   getNeighbors,
@@ -46,6 +54,7 @@ import {
   refOf,
 } from '@/lib/game/selectors';
 import type { CellRef, GameState } from '@/lib/game/types';
+import type { IncomeFloat } from '@/components/CellView';
 import {
   getGame,
   recordResult,
@@ -53,8 +62,11 @@ import {
   type SavedGame,
 } from '@/lib/storage/games';
 
-const BOT_TURN_DELAY_MS = 600;
-const AUTO_BATTLE_DELAY_MS = 350;
+// A bot pauses to "think" before acting (random, so it feels less robotic) and
+// settles briefly after, so consecutive bot moves don't blur together.
+const AI_BEFORE_MIN_MS = 450;
+const AI_BEFORE_MAX_MS = 900;
+const AI_AFTER_MS = 350;
 
 function newGame(prev: GameState): GameState {
   const { humanFaction, botFaction } = resolveFactions(prev);
@@ -85,6 +97,7 @@ function normalizeState(state: GameState): GameState {
 export default function GameScreen({ gameId }: { gameId: string }) {
   const { user, logout } = useAuth();
   const { t } = useI18n();
+  const { view } = useBoardView();
   const router = useRouter();
 
   const [envelope, setEnvelope] = useState<SavedGame | null>(null);
@@ -93,14 +106,31 @@ export default function GameScreen({ gameId }: { gameId: string }) {
   const [pendingTarget, setPendingTarget] = useState<CellRef | null>(null);
   const [allocTarget, setAllocTarget] = useState<CellRef | null>(null);
   const autoAllocTurnRef = useRef<string | null>(null);
+  // Timestamp of the last committed bot move, for the post-move settle delay.
+  const lastAiCommitRef = useRef(0);
+  const [incomeFloats, setIncomeFloats] = useState<IncomeFloat[]>([]);
+  const [boardRotation, setBoardRotation] = useState<BoardRotation>(0);
+  const [moveAnim, setMoveAnim] = useState<MoveAnim | null>(null);
+  const animatedMoveRef = useRef(0);
+  // The previously committed state, for reading a move's pre-move target cell.
+  const prevStateRef = useRef<GameState | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [resultClosed, setResultClosed] = useState(false);
 
   useEffect(() => {
     const game = getGame(gameId);
-    setEnvelope(game ? { ...game, state: normalizeState(game.state) } : null);
+    const normalized = game
+      ? { ...game, state: normalizeState(game.state) }
+      : null;
+    // Treat a move already present in the loaded game as "seen".
+    animatedMoveRef.current = normalized?.state.lastMove?.id ?? 0;
+    setEnvelope(normalized);
     setLoaded(true);
   }, [gameId]);
+
+  useEffect(() => {
+    if (view === '2d') setBoardRotation(0);
+  }, [view]);
 
   const updateState = useCallback((fn: (s: GameState) => GameState) => {
     setEnvelope((prev) => {
@@ -111,7 +141,61 @@ export default function GameScreen({ gameId }: { gameId: string }) {
     });
   }, []);
 
+  const addIncomeFloat = useCallback((ref: CellRef, amount: number) => {
+    setIncomeFloats((prev) => [
+      ...prev,
+      { id: Date.now() + Math.random(), ref, amount },
+    ]);
+  }, []);
+
+  const removeIncomeFloat = useCallback((id: number) => {
+    setIncomeFloats((prev) => prev.filter((f) => f.id !== id));
+  }, []);
+
   const state = envelope?.state ?? null;
+
+  // Slide a sprite from source to target whenever a fresh move appears.
+  const lastMove = state?.lastMove ?? null;
+  useEffect(() => {
+    if (!state || !lastMove || animatedMoveRef.current === lastMove.id) return;
+    animatedMoveRef.current = lastMove.id;
+    const faction =
+      lastMove.player === 'human' ? state.humanFaction : state.botFaction;
+    const prev = prevStateRef.current;
+    const holdCell = prev ? getCell(prev.board, lastMove.to) : null;
+    setMoveAnim({
+      id: lastMove.id,
+      from: lastMove.from,
+      to: lastMove.to,
+      player: lastMove.player,
+      kind: lastMove.kind,
+      faction,
+      flip: lastMove.player === 'human',
+      holdCell,
+    });
+    // A defender that has to die first (attack on an occupied enemy cell) makes
+    // the 3D sequence longer.
+    const killsDefender =
+      lastMove.kind === 'attack' &&
+      !!holdCell &&
+      holdCell.owner != null &&
+      holdCell.owner !== lastMove.player &&
+      holdCell.soldiers > 0;
+    const duration =
+      view === '3d' ? (killsDefender ? 1160 : 940) : 940;
+    const timer = setTimeout(
+      () => setMoveAnim((m) => (m && m.id === lastMove.id ? null : m)),
+      duration,
+    );
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastMove?.id]);
+
+  // Remember the committed state so the next move can read its pre-move target.
+  // Declared after the animation effect so that one reads the prior value first.
+  useEffect(() => {
+    prevStateRef.current = state;
+  }, [state]);
   const activePlayer = state?.currentPlayer ?? null;
   const userSide = state ? humanControlledSide(state) : null;
   const isUserTurn =
@@ -124,16 +208,27 @@ export default function GameScreen({ gameId }: { gameId: string }) {
   useEffect(() => {
     if (!state || state.phase === 'gameOver') return;
     if (!isAiControlled(state, state.currentPlayer)) return;
-    const delay = isBotVsBot(state) ? AUTO_BATTLE_DELAY_MS : BOT_TURN_DELAY_MS;
+    const snapshot = state;
+    // Wait out any remaining settle from the previous bot move, then a random
+    // "thinking" pause before this one acts.
+    const afterRemaining = Math.max(
+      0,
+      AI_AFTER_MS - (Date.now() - lastAiCommitRef.current),
+    );
+    const beforeDelay =
+      AI_BEFORE_MIN_MS + Math.random() * (AI_BEFORE_MAX_MS - AI_BEFORE_MIN_MS);
     const timer = setTimeout(() => {
+      const floater = autoCastleIncome(snapshot);
+      if (floater) addIncomeFloat(floater.ref, floater.amount);
       updateState((s) =>
         s.phase !== 'gameOver' && isAiControlled(s, s.currentPlayer)
           ? executeBotTurn(s)
           : s,
       );
-    }, delay);
+      lastAiCommitRef.current = Date.now();
+    }, afterRemaining + beforeDelay);
     return () => clearTimeout(timer);
-  }, [state, updateState]);
+  }, [state, updateState, addIncomeFloat]);
 
   useEffect(() => {
     if (!envelope || envelope.state.phase !== 'gameOver' || envelope.resultRecorded)
@@ -183,10 +278,11 @@ export default function GameScreen({ gameId }: { gameId: string }) {
     autoAllocTurnRef.current = turnKey;
 
     const castle = getMobilizationCells(state.board, state.currentPlayer)[0];
-    updateState((s) =>
-      placeIncome(s, refOf(castle), s.pendingIncome),
-    );
-  }, [state, isUserTurn, updateState]);
+    const ref = refOf(castle);
+    const amount = state.pendingIncome;
+    addIncomeFloat(ref, amount);
+    updateState((s) => placeIncome(s, ref, amount));
+  }, [state, isUserTurn, updateState, addIncomeFloat]);
 
   function finishUserAction(next: GameState) {
     setSelected(null);
@@ -262,6 +358,10 @@ export default function GameScreen({ gameId }: { gameId: string }) {
     setPendingTarget(null);
     setAllocTarget(null);
     autoAllocTurnRef.current = null;
+    setIncomeFloats([]);
+    setBoardRotation(0);
+    setMoveAnim(null);
+    animatedMoveRef.current = 0;
     setResultClosed(false);
     setEnvelope((prev) =>
       prev
@@ -330,7 +430,7 @@ export default function GameScreen({ gameId }: { gameId: string }) {
       : null;
 
   return (
-    <div className="screen screen--game">
+    <div className={`screen screen--game screen--${view}`}>
       <AppHeader
         name={user?.name}
         onLogout={logout}
@@ -341,39 +441,71 @@ export default function GameScreen({ gameId }: { gameId: string }) {
       <Scoreboard state={state} youName={user?.name ?? t('common.you')} />
 
       <div className="statusbar">
-        <span>{hint}</span>
-        {(isUserActing || showPlayAgain) && (
-          <div className="statusbar__actions">
-            {showFortButton && (
-              <button className="btn btn--sm" onClick={handleBuildFort}>
-                {t('game.buildFort', { cost: FORT_COST })}
-              </button>
-            )}
-            {isUserActing && (
-              <button className="btn btn--sm btn--ghost" onClick={handlePass}>
-                {t('game.pass')}
-              </button>
-            )}
-            {showPlayAgain && (
-              <button
-                className="btn btn--sm btn--primary"
-                onClick={handleRestart}
-              >
-                {t('result.again')}
-              </button>
-            )}
-          </div>
-        )}
+        <p className="statusbar__hint">{hint}</p>
+        <div className="statusbar__actions">
+          {showFortButton && (
+            <button className="btn btn--sm" onClick={handleBuildFort}>
+              {t('game.buildFort', { cost: FORT_COST })}
+            </button>
+          )}
+          {isUserActing && (
+            <button className="btn btn--sm btn--ghost" onClick={handlePass}>
+              {t('game.pass')}
+            </button>
+          )}
+          {showPlayAgain && (
+            <button
+              className="btn btn--sm btn--primary"
+              onClick={handleRestart}
+            >
+              {t('result.again')}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="game-column">
-        <Board
-          state={state}
-          selected={selected}
-          legalTargets={legalTargets}
-          mobilizationTargets={mobilizationTargets}
-          onCellClick={handleCellClick}
-        />
+        <div className="board-stage">
+          <div className="board-stage__board">
+            {view === '3d' ? (
+              <IsoBoard
+                state={state}
+                selected={selected}
+                legalTargets={legalTargets}
+                mobilizationTargets={mobilizationTargets}
+                incomeFloats={incomeFloats}
+                moveAnim={moveAnim}
+                rotation={boardRotation}
+                userSide={userSide}
+                onIncomeFloatEnd={removeIncomeFloat}
+                onCellClick={handleCellClick}
+              />
+            ) : (
+              <Board
+                state={state}
+                selected={selected}
+                legalTargets={legalTargets}
+                mobilizationTargets={mobilizationTargets}
+                incomeFloats={incomeFloats}
+                moveAnim={moveAnim}
+                rotation={boardRotation}
+                onIncomeFloatEnd={removeIncomeFloat}
+                onCellClick={handleCellClick}
+              />
+            )}
+            {view === '3d' && (
+              <button
+                type="button"
+                className="icon-btn board-stage__rotate"
+                onClick={() => setBoardRotation((r) => nextRotation(r))}
+                aria-label={t('game.rotateBoard')}
+                title={t('game.rotateBoard')}
+              >
+                <RotateCw size={18} />
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {allocTarget && state && (

@@ -14,7 +14,32 @@ import {
   getPlayerCells,
   opponentOf,
 } from './selectors';
-import type { Board, Cell, CellRef, GameState, PlayerId } from './types';
+import type {
+  Board,
+  Cell,
+  CellRef,
+  GameState,
+  MoveKind,
+  PlayerId,
+} from './types';
+
+// Monotonic id so the UI can tell two otherwise-identical moves apart.
+let moveSeq = 0;
+
+function taggedMove(
+  state: GameState,
+  from: CellRef,
+  to: CellRef,
+  kind: MoveKind,
+) {
+  return {
+    id: ++moveSeq,
+    from: { row: from.row, col: from.col },
+    to: { row: to.row, col: to.col },
+    player: state.currentPlayer,
+    kind,
+  };
+}
 
 function updateCell(board: Board, ref: CellRef, patch: Partial<Cell>): Board {
   return board.map((row, r) =>
@@ -108,7 +133,7 @@ export function moveSoldiers(
     soldiers: source.soldiers - soldiers,
   });
   board = updateCell(board, to, { soldiers: target.soldiers + soldiers });
-  const next = { ...state, board };
+  const next = { ...state, board, lastMove: taggedMove(state, from, to, 'move') };
   return withLog(
     next,
     `${playerName(state.currentPlayer)} moved ${soldiers} soldiers from ${cellLabel(from)} to ${cellLabel(to)}.`,
@@ -149,7 +174,11 @@ export function occupyNeutralCell(
     owner: state.currentPlayer,
     soldiers,
   });
-  const next = { ...state, board };
+  const next = {
+    ...state,
+    board,
+    lastMove: taggedMove(state, from, to, 'occupy'),
+  };
   return withLog(
     next,
     `${playerName(state.currentPlayer)} occupied ${cellLabel(to)} with ${soldiers} soldiers.`,
@@ -199,7 +228,11 @@ export function attackCell(
     building: target.building === 'fort' ? null : target.building,
   });
 
-  let next: GameState = { ...state, board };
+  let next: GameState = {
+    ...state,
+    board,
+    lastMove: taggedMove(state, from, to, 'attack'),
+  };
   next = withLog(
     next,
     `${playerName(attacker)} attacked ${cellLabel(to)} from ${cellLabel(from)}. ` +

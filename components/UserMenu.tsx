@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Globe, LogOut, Moon, Settings, Sun } from 'lucide-react';
+import { Box, Globe, LogOut, Moon, Settings, Sun } from 'lucide-react';
 import { LANGS, useI18n, type Lang } from '@/lib/i18n';
 import { useTheme } from '@/lib/theme';
+import { useBoardView, type BoardView } from '@/lib/view';
 
 /** Settings button that opens theme, language and sign-out. */
 export default function UserMenu({
@@ -15,6 +16,7 @@ export default function UserMenu({
 }) {
   const { t, lang, setLang } = useI18n();
   const { theme, toggle } = useTheme();
+  const { view, setView } = useBoardView();
   const [open, setOpen] = useState(false);
 
   return (
@@ -39,6 +41,19 @@ export default function UserMenu({
               {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
               <span>{t('lobby.theme')}</span>
             </button>
+
+            <label className="usermenu__item usermenu__item--lang">
+              <Box size={18} />
+              <span>{t('lobby.boardView')}</span>
+              <select
+                className="usermenu__lang"
+                value={view}
+                onChange={(e) => setView(e.target.value as BoardView)}
+              >
+                <option value="2d">{t('lobby.view2d')}</option>
+                <option value="3d">{t('lobby.view3d')}</option>
+              </select>
+            </label>
 
             <label className="usermenu__item usermenu__item--lang">
               <Globe size={18} />

@@ -3,8 +3,8 @@
 /* Theme variables ported from maeth (src/index.css). Dark is the default so a
    missing data-theme attribute still renders correctly. */
 :root {
-  --game-column: 460px;
-  --game-column-w: min(86vw, var(--game-column));
+  /* Board column: ~90% of a phone, ~60% of a desktop (see media query below). */
+  --game-column-w: 90vw;
 
   --bg: #0f141a;
   --card: #1b232d;
@@ -84,6 +84,41 @@ body {
 .screen--game {
   align-items: center;
   gap: 12px;
+  /* The 3D board needs room, so the game screen isn't capped at the 520px the
+     other screens use. */
+  max-width: min(96vw, 1100px);
+}
+
+/* The flat 2D board keeps the original ~480px mockup width. */
+.screen--2d {
+  --game-column-w: min(480px, 92vw);
+  max-width: 520px;
+}
+
+/* The 3D board fills the width but is capped so the whole screen fits the
+   viewport without scrolling. ~240px is reserved for header + scoreboard +
+   status bar + gaps; tune if those change. */
+.screen--3d {
+  --game-column-w: 96vw;
+}
+.screen--3d .game-column {
+  width: auto;
+  /* nudge the whole board down a touch on the page */
+  margin-top: 3vh;
+}
+.screen--3d .iso-board {
+  width: auto;
+  /* height = min(width-limited, height-limited); aspect-ratio derives width.
+     The flat board is ~2.4:1, so this stays short and fits one screen. */
+  height: min(
+    calc(var(--game-column-w) / 2.399),
+    calc(100dvh - 230px)
+  );
+}
+@media (min-width: 760px) {
+  .screen--3d {
+    --game-column-w: min(72vw, 1200px);
+  }
 }
 
 .screen__title {
@@ -453,7 +488,7 @@ body {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -674,10 +709,35 @@ body {
 }
 
 .game-column {
+  position: relative;
+  z-index: 0;
   width: var(--game-column-w);
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.board-stage {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+.board-stage__board {
+  position: relative;
+  max-width: 100%;
+}
+.screen--2d .board-stage__board {
+  width: 100%;
+}
+.screen--3d .board-stage__board {
+  width: auto;
+}
+.board-stage__rotate {
+  position: absolute;
+  top: 2%;
+  right: 2%;
+  z-index: 5;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 
 /* scoreboard (ported from maeth): names over soldier totals */
@@ -767,26 +827,38 @@ body {
   padding: 0 8px;
 }
 
-/* turn hint under the scoreboard */
+/* turn hint under the scoreboard — always two rows: hint + action slot */
 .statusbar {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  grid-template-rows: 1.4em 34px;
   gap: 8px;
+  align-items: center;
   width: var(--game-column-w);
+  height: calc(24px + 1.4em + 8px + 34px);
   padding: 12px;
+  box-sizing: border-box;
   border-radius: 12px;
   background: var(--card);
   font-weight: 600;
   font-size: 14px;
+  line-height: 1.4;
   text-align: center;
+}
+.statusbar__hint {
+  margin: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
 }
 .statusbar__actions {
   display: flex;
   gap: 8px;
   justify-content: center;
-  flex-wrap: wrap;
+  align-items: center;
+  min-height: 34px;
+  flex-wrap: nowrap;
 }
 
 /* soldier-count slider modal */
@@ -848,6 +920,196 @@ body {
   place-items: stretch;
 }
 
+/* ===== isometric board (board3d.png) ===== */
+.iso-board {
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
+  width: 100%;
+  aspect-ratio: 1449 / 604;
+  background: url('/assets/board3d.png') center / contain no-repeat;
+}
+.iso-cell {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+/* clickable diamond footprint, centred on the tile */
+.iso-tile {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  transition: background 0.12s ease;
+}
+.iso-tile--selected {
+  background: rgba(241, 181, 10, 0.5);
+}
+.iso-tile--target {
+  background: rgba(63, 174, 90, 0.5);
+}
+.iso-tile--mobilize {
+  background: rgba(74, 144, 217, 0.5);
+}
+/* A positioned figure (a building, or one copy in a soldier stack). Uses the
+   individual `translate`/`scale` properties so the slide and the death-shrink
+   can animate independently without clobbering the anchor or the flip. */
+.iso-fig {
+  position: absolute;
+  height: auto;
+  translate: -50% -82%;
+  transform-origin: bottom center;
+  pointer-events: none;
+  user-select: none;
+  filter: drop-shadow(0 4px 5px rgba(0, 0, 0, 0.45));
+}
+.iso-fig--click {
+  pointer-events: auto;
+  cursor: pointer;
+}
+/* Hover one of your own cells → its figures and badge gently pulse, lifted
+   above their neighbours so nothing clips them. Enemy/neutral don't. */
+.iso-cell--mine:has(.iso-tile:hover, .iso-fig--click:hover) .iso-fig {
+  z-index: 30;
+  animation: iso-fig-pulse 0.85s ease-in-out infinite;
+}
+.iso-cell--mine:has(.iso-tile:hover, .iso-fig--click:hover) .iso-count {
+  z-index: 40;
+  animation: iso-fig-pulse 0.85s ease-in-out infinite;
+}
+@keyframes iso-fig-pulse {
+  0%,
+  100% {
+    scale: 1.04;
+  }
+  50% {
+    scale: 1.12;
+  }
+}
+.iso-fig__img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.iso-fig__img--flip {
+  transform: scaleX(-1);
+}
+.iso-move-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 45;
+}
+/* the defender shrinking away before the attackers land */
+.iso-fig--die {
+  animation: iso-fig-die 0.3s ease-in forwards;
+}
+@keyframes iso-fig-die {
+  to {
+    scale: 0.15;
+    opacity: 0;
+  }
+}
+/* the surviving group riding in — soft, decelerating landing (no end-jerk) */
+.iso-fig--move {
+  left: var(--fx);
+  top: var(--fy);
+  /* Car-like: accelerate, cruise, brake — smooth start and stop (ease-in-out). */
+  animation: iso-fig-slide 0.85s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+  animation-delay: var(--delay, 0ms);
+}
+@keyframes iso-fig-slide {
+  from {
+    left: var(--fx);
+    top: var(--fy);
+  }
+  to {
+    left: var(--tx);
+    top: var(--ty);
+  }
+}
+.iso-count {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  min-width: 24px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.3;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+.iso-count--human {
+  background: #4a90d9;
+}
+.iso-count--bot {
+  background: #d64545;
+}
+.iso-float {
+  position: absolute;
+  z-index: 46;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.1;
+  pointer-events: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  animation: iso-float-rise 0.85s ease-out forwards;
+}
+.iso-float--human {
+  background: #4a90d9;
+}
+.iso-float--bot {
+  background: #d64545;
+}
+@keyframes iso-float-rise {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -120%);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -260%);
+  }
+}
+/* a soldier sprite sliding from the source cell to the target on each move */
+.board__move {
+  position: absolute;
+  width: 25%;
+  height: 25%;
+  object-fit: contain;
+  padding: 5%;
+  left: var(--fx);
+  top: var(--fy);
+  z-index: 30;
+  pointer-events: none;
+  user-select: none;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.45));
+  animation: board-move-slide 0.85s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+.board__move--flip {
+  transform: scaleX(-1);
+}
+@keyframes board-move-slide {
+  from {
+    left: var(--fx);
+    top: var(--fy);
+  }
+  to {
+    left: var(--tx);
+    top: var(--ty);
+  }
+}
+
 /* board cells: transparent — the parchment draws the squares */
 .cell {
   position: relative;
@@ -905,6 +1167,13 @@ body {
   padding: 6%;
   pointer-events: none;
   user-select: none;
+  transform-origin: center center;
+}
+.cell__img--castle {
+  transform: scale(1.1) translateY(-4%);
+}
+.cell__img--fort {
+  transform: scale(0.95);
 }
 /* a unit stack: figures laid out absolutely inside the cell */
 .cell__army {
@@ -945,6 +1214,40 @@ body {
 }
 .cell__count--bot {
   background: #d64545;
+}
+
+.cell__income-float {
+  position: absolute;
+  left: 50%;
+  bottom: 22%;
+  z-index: 25;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 22px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  line-height: 1.1;
+  pointer-events: none;
+  user-select: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  animation: cell-income-float 0.85s ease-out forwards;
+}
+.cell__income-float--human {
+  background: #4a90d9;
+}
+.cell__income-float--bot {
+  background: #d64545;
+}
+@keyframes cell-income-float {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -70%);
+  }
 }
 
 .spin {

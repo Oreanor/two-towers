@@ -1,5 +1,8 @@
-import type { Cell } from '@/lib/game/types';
+import type { CSSProperties } from 'react';
+import type { Cell, CellRef } from '@/lib/game/types';
 import { factionAsset, soldierSpriteAdjust, type FactionId } from '@/lib/game/factions';
+
+export type IncomeFloat = { id: number; ref: CellRef; amount: number };
 
 type Props = {
   cell: Cell;
@@ -8,6 +11,9 @@ type Props = {
   isSelected: boolean;
   isLegalTarget: boolean;
   isMobilizationTarget: boolean;
+  incomeFloats: IncomeFloat[];
+  onIncomeFloatEnd: (id: number) => void;
+  gridStyle?: CSSProperties;
   onClick: () => void;
 };
 
@@ -66,6 +72,9 @@ export default function CellView({
   isSelected,
   isLegalTarget,
   isMobilizationTarget,
+  incomeFloats,
+  onIncomeFloatEnd,
+  gridStyle,
   onClick,
 }: Props) {
   const owner =
@@ -94,12 +103,20 @@ export default function CellView({
   // Both soldier sprites face the same way; mirror the human's so the armies
   // face each other (human marches from bottom-left toward the bot's corner).
   const flip = cell.owner === 'human' ? ' cell__army--flip' : '';
+  const cellFloats = incomeFloats.filter(
+    (f) => f.ref.row === cell.row && f.ref.col === cell.col,
+  );
 
   return (
-    <button className={`cell ${owner}${ring}`} onClick={onClick}>
+    <button className={`cell ${owner}${ring}`} style={gridStyle} onClick={onClick}>
       {building && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img className="cell__img" src={building} alt="" draggable={false} />
+        <img
+          className={`cell__img cell__img--${cell.building === 'mainCastle' ? 'castle' : 'fort'}`}
+          src={building}
+          alt=""
+          draggable={false}
+        />
       )}
       {isArmy && faction && (
         <div className={`cell__army${flip}`} aria-hidden="true">
@@ -125,6 +142,15 @@ export default function CellView({
           ))}
         </div>
       )}
+      {cellFloats.map((f) => (
+        <span
+          key={f.id}
+          className={`cell__income-float cell__income-float--${cell.owner}`}
+          onAnimationEnd={() => onIncomeFloatEnd(f.id)}
+        >
+          +{f.amount}
+        </span>
+      ))}
       {cell.owner !== null && cell.soldiers > 0 && (
         <span className={`cell__count cell__count--${cell.owner}`}>
           {cell.soldiers}

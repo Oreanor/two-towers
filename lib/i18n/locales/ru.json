@@ -24,6 +24,9 @@
     "settings": "Настройки",
     "theme": "Тема",
     "language": "Язык",
+    "boardView": "Доска",
+    "view2d": "2D",
+    "view3d": "3D",
     "logout": "Выход",
     "pickSides": "Выберите стороны",
     "sideLeft": "Нижний левый угол",
@@ -76,7 +79,8 @@
     "autoBattle": "Автобой…",
     "autoBattleOver": "Автобой завершён",
     "notFound": "Игра не найдена",
-    "toLobby": "В лобби"
+    "toLobby": "В лобби",
+    "rotateBoard": "Повернуть доску"
   },
   "result": {
     "win": "🎉 Вы победили!",
