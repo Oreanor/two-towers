@@ -6,11 +6,14 @@ import { Play, Plus, Trash2 } from 'lucide-react';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { useI18n } from '@/lib/i18n';
 import AppHeader from '@/components/AppHeader';
-import RulesModal from '@/components/RulesModal';
-import ConfirmModal from '@/components/ConfirmModal';
 import SideSelectModal, { type GameSetup } from '@/components/SideSelectModal';
+import ConfirmModal from '@/components/ConfirmModal';
+import Button from '@/components/ui/Button';
+import Card from '@/components/ui/Card';
+import FactionShield from '@/components/ui/FactionShield';
+import IconButton from '@/components/ui/IconButton';
+import ScreenLayout from '@/components/ui/ScreenLayout';
 import { createInitialState } from '@/lib/game/initialState';
-import { factionAsset } from '@/lib/game/factions';
 import { startTurn } from '@/lib/game/rules';
 import type { GameState } from '@/lib/game/types';
 import {
@@ -37,7 +40,6 @@ export default function LobbyScreen() {
   const { t, lang } = useI18n();
   const router = useRouter();
   const [games, setGames] = useState<SavedGame[]>([]);
-  const [rulesOpen, setRulesOpen] = useState(false);
   const [confirmTarget, setConfirmTarget] = useState<SavedGame | null>(null);
   const [sideSelectOpen, setSideSelectOpen] = useState(false);
 
@@ -79,86 +81,59 @@ export default function LobbyScreen() {
     game.state.phase === 'gameOver' ? t('status.over') : t('status.active');
 
   return (
-    <div className="screen">
-      <AppHeader
-        name={user?.name}
-        onLogout={logout}
-        onHelp={() => setRulesOpen(true)}
-      />
+    <ScreenLayout>
+      <AppHeader name={user?.name} onLogout={logout} />
 
-      <button
-        className="btn btn--primary btn--block btn--icon-text"
-        onClick={() => setSideSelectOpen(true)}
-      >
+      <Button variant="primary" block onClick={() => setSideSelectOpen(true)}>
         <Plus size={18} />
         {t('lobby.create')}
-      </button>
+      </Button>
 
-      <section className="card">
-        <div className="section-head">
-          <h3>{t('lobby.yourGames')}</h3>
-        </div>
+      <Card>
+        <h3 className="m-0 text-[15px] font-bold">{t('lobby.yourGames')}</h3>
         {games.length === 0 ? (
-          <p className="muted tiny" style={{ margin: 0 }}>
-            {t('lobby.noGames')}
-          </p>
+          <p className="m-0 text-xs text-muted">{t('lobby.noGames')}</p>
         ) : (
-          <ul className="list">
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {games.map((game) => (
-              <li key={game.id} className="list__item">
+              <li
+                key={game.id}
+                className="flex items-center justify-between gap-2 rounded-xl bg-card p-2.5 px-3"
+              >
                 <button
-                  className="list__item-enter"
+                  className="group flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 border-none bg-transparent p-0 text-left font-[inherit] text-inherit"
                   onClick={() => router.push(`/play/${game.id}`)}
                   aria-label={t('lobby.continueGame')}
                   title={t('lobby.continueGame')}
                 >
-                  <span className="list__item-play">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-[9px] bg-accent text-accent-fg">
                     <Play size={16} />
                   </span>
-                  <span className="list__item-info">
-                    <span className="who__name list__item-match">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        className="list__item-shield"
-                        src={factionAsset(
-                          game.state.humanFaction ?? 'gondor',
-                          'shield',
-                        )}
-                        alt=""
-                        draggable={false}
-                      />
-                      <span className="list__item-mode">
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className="inline-flex items-center gap-1.5 font-semibold group-hover:underline">
+                      <FactionShield faction={game.state.humanFaction ?? 'gondor'} />
+                      <span className="whitespace-nowrap text-xs font-semibold text-muted">
                         {matchLabel(game.state, t)}
                       </span>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        className="list__item-shield"
-                        src={factionAsset(
-                          game.state.botFaction ?? 'mordor',
-                          'shield',
-                        )}
-                        alt=""
-                        draggable={false}
-                      />
+                      <FactionShield faction={game.state.botFaction ?? 'mordor'} />
                     </span>
-                    <span className="muted tiny">
+                    <span className="text-xs text-muted">
                       {gameStatusLabel(game)} · {formatWhen(game.createdAt)}
                     </span>
                   </span>
                 </button>
-                <button
-                  className="icon-btn"
+                <IconButton
                   onClick={() => setConfirmTarget(game)}
                   aria-label={t('lobby.delete')}
                   title={t('lobby.delete')}
                 >
                   <Trash2 size={16} />
-                </button>
+                </IconButton>
               </li>
             ))}
           </ul>
         )}
-      </section>
+      </Card>
 
       {sideSelectOpen && (
         <SideSelectModal
@@ -176,8 +151,6 @@ export default function LobbyScreen() {
           onClose={() => setConfirmTarget(null)}
         />
       )}
-
-      {rulesOpen && <RulesModal onClose={() => setRulesOpen(false)} />}
-    </div>
+    </ScreenLayout>
   );
 }

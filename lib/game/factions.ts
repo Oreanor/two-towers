@@ -35,10 +35,6 @@ export function soldierSpriteAdjust(
   };
 }
 
-export function isFactionId(value: string): value is FactionId {
-  return (FACTIONS as readonly string[]).includes(value);
-}
-
 /** Old saves may lack factions — fall back to Gondor vs Mordor. */
 export function resolveFactions(state: {
   humanFaction?: FactionId;

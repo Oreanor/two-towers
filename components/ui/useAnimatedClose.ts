@@ -3,15 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useModalDismiss } from './useModalDismiss';
 
-/** Matches the `.modal--out` / `.modal-backdrop--out` CSS animation duration. */
+/** Matches `animate-modal-out` duration in globals.css. */
 const EXIT_MS = 180;
 
-/**
- * Uniform modal close: flips `closing` true so the exit animation can play, then
- * calls `onClose` (which unmounts the modal) once it's finished. Also wires
- * Escape-to-close and focus restoration. Route dismiss affordances (backdrop,
- * cancel/close buttons) through the returned `close`.
- */
 export function useAnimatedClose(onClose: () => void): {
   closing: boolean;
   close: () => void;

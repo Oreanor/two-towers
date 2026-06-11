@@ -17,12 +17,6 @@ export function rotateRef(ref: CellRef, turns: BoardRotation): CellRef {
   return { row, col };
 }
 
-/** Map a clicked on-screen cell back to logical board coordinates. */
-export function unrotateRef(ref: CellRef, turns: BoardRotation): CellRef {
-  const steps = (4 - (turns % 4)) % 4;
-  return rotateRef(ref, steps as BoardRotation);
-}
-
 export function nextRotation(turns: BoardRotation): BoardRotation {
   return ((turns + 1) % 4) as BoardRotation;
 }

@@ -1,78 +1,25 @@
 'use client';
 
 import type { CSSProperties } from 'react';
+import { cn } from '@/lib/cn';
+import { includesRef, factionOf } from '@/lib/game/boardUi';
+import { rotateRef, type BoardRotation } from '@/lib/game/boardRotation';
 import {
-  rotateRef,
-  type BoardRotation,
-} from '@/lib/game/boardRotation';
+  isoCellCenter,
+  isoFigCenter,
+  isoStackOffsets,
+  isoTileHighlight,
+  ISO_CASTLE_LIFT,
+  ISO_CASTLE_W,
+  ISO_FORT_W,
+  ISO_SOLDIER_W,
+  ISO_TILE_H,
+  ISO_TILE_W,
+} from '@/lib/game/isoLayout';
+import { factionAsset, soldierSpriteAdjust } from '@/lib/game/factions';
 import type { Cell, CellRef, GameState, PlayerId } from '@/lib/game/types';
-import {
-  factionAsset,
-  soldierSpriteAdjust,
-  type FactionId,
-} from '@/lib/game/factions';
-import type { IncomeFloat } from './CellView';
-import type { MoveAnim } from './Board';
-
-/**
- * Isometric board over board3d.png. The art is a 4×4 diamond grid drawn with a
- * 275×96 tile (the user-measured size). The natural image is 1449×1085, so all
- * positions below are percentages of that and scale with the rendered board.
- *
- * Projection: from the grid's back corner O, stepping +1 column moves by
- * (+halfW, +halfH) and +1 row by (−halfW, +halfH). Tune O if the grid drifts.
- */
-// Calibrated for the flat board3d.png (1449×604). Grid back corner + tile basis.
-const OX = 49.2; // back corner x   (% width)
-const OY = 8.0; // back corner y   (% height) — raised ~one cell
-const HW = 9.41; // half tile width  (% width) — squeezed 3% horizontally
-const HH = 8.97; // half tile height (% height)
-const TILE_W = 18.82; // full tile width  (% width) — squeezed 3%
-const TILE_H = 17.95; // full tile height (% height)
-
-/** Every piece sprite is drawn at this fraction of its tile-relative size. */
-const PIECE_SCALE = 0.6075; // 0.81 × 0.75 — a quarter smaller
-const SOLDIER_W = 15 * PIECE_SCALE * 0.5; // % width — soldiers halved
-const BUILDING_W = 22 * PIECE_SCALE * 0.75; // % width — castles/forts −25%
-const CASTLE_W = BUILDING_W * 1.1;
-const FORT_W = BUILDING_W * 0.95;
-const CASTLE_LIFT = -0.04 * TILE_H; // nudge castles up within the cell
-
-// A unit is drawn as overlapping copies: one per started 10 soldiers, capped.
-const SOLDIERS_PER_ICON = 10;
-const MAX_ICONS = 5;
-// Copies huddle in a tight cluster (a small iso-squished ring) rather than a row.
-const STACK_RX = 2.6; // cluster radius, % board width
-const STACK_RY = 1.4; // cluster radius, % board height
-
-/** Screen centre of cell (r,c), in % of the board image. */
-function cellCenter(r: number, c: number): { left: number; top: number } {
-  return { left: OX + HW * (c - r), top: OY + HH * (c + r + 1) };
-}
-
-// Fine offset applied to figures (and their badges) only — not the click tiles.
-const FIG_DX = 0.07 * TILE_W; // +7% of a cell to the right (12% − 5% back)
-const FIG_DY = -0.07 * TILE_H; // 7% of a cell up
-
-/** Where a figure stands: the cell centre nudged by the figure offset. */
-function figCenter(r: number, c: number): { left: number; top: number } {
-  const p = cellCenter(r, c);
-  return { left: p.left + FIG_DX, top: p.top + FIG_DY };
-}
-
-/** Per-copy cluster offsets, ordered back-to-front so z-stacking reads right. */
-function stackOffsets(soldiers: number): { dx: number; dy: number }[] {
-  const n = Math.min(
-    Math.max(Math.ceil(soldiers / SOLDIERS_PER_ICON), 1),
-    MAX_ICONS,
-  );
-  if (n === 1) return [{ dx: 0, dy: 0 }];
-  const pts = Array.from({ length: n }, (_, i) => {
-    const a = -Math.PI / 2 + (2 * Math.PI * i) / n;
-    return { dx: STACK_RX * Math.cos(a), dy: STACK_RY * Math.sin(a) };
-  });
-  return pts.sort((p, q) => p.dy - q.dy);
-}
+import type { FactionId } from '@/lib/game/factions';
+import type { IncomeFloat, MoveAnim } from '@/components/board/types';
 
 type Props = {
   state: GameState;
@@ -82,27 +29,12 @@ type Props = {
   incomeFloats: IncomeFloat[];
   moveAnim: MoveAnim | null;
   rotation: BoardRotation;
-  /** The side the player controls; only their pieces pulse on hover. */
   userSide: PlayerId | null;
   onIncomeFloatEnd: (id: number) => void;
   onCellClick: (ref: CellRef) => void;
+  className?: string;
 };
 
-function includesRef(list: CellRef[], ref: CellRef): boolean {
-  return list.some((r) => r.row === ref.row && r.col === ref.col);
-}
-
-function factionOf(
-  cell: Cell,
-  humanFaction: FactionId,
-  botFaction: FactionId,
-): FactionId | null {
-  if (cell.owner === 'human') return humanFaction;
-  if (cell.owner === 'bot') return botFaction;
-  return null;
-}
-
-/** One positioned sprite (a stacked soldier copy or a building). */
 function Fig({
   left,
   top,
@@ -126,19 +58,17 @@ function Fig({
 }) {
   return (
     <div
-      className={`iso-fig${onClick ? ' iso-fig--click' : ''}${className ? ` ${className}` : ''}`}
-      style={{
-        left: `${left}%`,
-        top: `${top}%`,
-        width: `${width}%`,
-        zIndex: z,
-        ...style,
-      }}
+      className={cn(
+        'iso-fig pointer-events-none absolute h-auto -translate-x-1/2 -translate-y-[82%] origin-bottom select-none drop-shadow-[0_4px_5px_rgba(0,0,0,0.45)]',
+        onClick && 'iso-fig-click pointer-events-auto cursor-pointer',
+        className,
+      )}
+      style={{ left: `${left}%`, top: `${top}%`, width: `${width}%`, zIndex: z, ...style }}
       onClick={onClick}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        className={`iso-fig__img${flip ? ' iso-fig__img--flip' : ''}`}
+        className={cn('block size-full h-auto', flip && 'scale-x-[-1]')}
         src={src}
         alt=""
         draggable={false}
@@ -147,7 +77,6 @@ function Fig({
   );
 }
 
-/** The static sprites for a cell (building, or a stack of soldier copies). */
 function cellFigs(
   cell: Cell,
   faction: FactionId,
@@ -162,8 +91,8 @@ function cellFigs(
       <Fig
         key="b"
         left={center.left}
-        top={center.top + (cell.building === 'mainCastle' ? CASTLE_LIFT : 0)}
-        width={cell.building === 'mainCastle' ? CASTLE_W : FORT_W}
+        top={center.top + (cell.building === 'mainCastle' ? ISO_CASTLE_LIFT : 0)}
+        width={cell.building === 'mainCastle' ? ISO_CASTLE_W : ISO_FORT_W}
         src={factionAsset(faction, asset)}
         flip={false}
         className={className}
@@ -175,13 +104,13 @@ function cellFigs(
   if (cell.soldiers <= 0) return [];
   const adj = soldierSpriteAdjust(faction, cell.owner === 'human');
   const src = factionAsset(faction, 'soldier');
-  return stackOffsets(cell.soldiers).map(({ dx, dy }, i) => (
+  return isoStackOffsets(cell.soldiers).map(({ dx, dy }, i) => (
     <Fig
       key={`s${i}`}
       z={zBase + i}
       left={center.left + dx}
       top={center.top + dy}
-      width={SOLDIER_W * adj.scale}
+      width={ISO_SOLDIER_W * adj.scale}
       src={src}
       flip={cell.owner === 'human'}
       className={className}
@@ -201,8 +130,8 @@ export default function IsoBoard({
   userSide,
   onIncomeFloatEnd,
   onCellClick,
+  className,
 }: Props) {
-  // Painter's order: back cells first so front pieces overlap them.
   const order: CellRef[] = [];
   for (let r = 0; r < 4; r++)
     for (let c = 0; c < 4; c++) order.push({ row: r, col: c });
@@ -212,31 +141,30 @@ export default function IsoBoard({
     return va.row + va.col - (vb.row + vb.col);
   });
 
-  // The animated target's live piece is suppressed while the move plays.
   const animTo = moveAnim?.to ?? null;
 
   return (
-    <div className="iso-board">
+    <div
+      className={cn(
+        'relative isolate z-0 aspect-[1449/604] h-full w-auto bg-board-3d bg-contain bg-center bg-no-repeat',
+        className,
+      )}
+    >
       {order.map(({ row: r, col: c }) => {
         const cell = state.board[r][c];
         const ref = { row: r, col: c };
         const slot = rotateRef(ref, rotation);
-        const pos = cellCenter(slot.row, slot.col);
-        const highlight =
-          selected && selected.row === r && selected.col === c
-            ? ' iso-tile--selected'
-            : includesRef(legalTargets, ref)
-              ? ' iso-tile--target'
-              : includesRef(mobilizationTargets, ref)
-                ? ' iso-tile--mobilize'
-                : '';
+        const pos = isoCellCenter(slot.row, slot.col);
+        const isSelected = !!(selected && selected.row === r && selected.col === c);
+        const isLegal = includesRef(legalTargets, ref);
+        const isMobilize = includesRef(mobilizationTargets, ref);
 
         const faction = factionOf(cell, state.humanFaction, state.botFaction);
         const isAnimTarget = animTo?.row === r && animTo?.col === c;
         const mine = userSide != null && cell.owner === userSide;
-        const fpos = figCenter(slot.row, slot.col);
-        const lift = cell.building ? 20 : 14; // badge sits above the figure
-        const depth = slot.row + slot.col; // back-to-front on the rotated view
+        const fpos = isoFigCenter(slot.row, slot.col);
+        const lift = cell.building ? 20 : 14;
+        const depth = slot.row + slot.col;
         const cellFloats = incomeFloats.filter(
           (f) => f.ref.row === r && f.ref.col === c,
         );
@@ -244,21 +172,23 @@ export default function IsoBoard({
         return (
           <div
             key={`${r}-${c}`}
-            className={`iso-cell${mine ? ' iso-cell--mine' : ''}`}
+            className={cn('pointer-events-none absolute inset-0', mine && 'iso-cell-mine')}
           >
             <button
-              className={`iso-tile${highlight}`}
+              className={cn(
+                'iso-tile pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer border-none bg-transparent p-0 transition-colors [clip-path:polygon(50%_0,100%_50%,50%_100%,0_50%)]',
+                isoTileHighlight(isSelected, isLegal, isMobilize),
+              )}
               style={{
                 left: `${pos.left}%`,
                 top: `${pos.top}%`,
-                width: `${TILE_W}%`,
-                height: `${TILE_H}%`,
+                width: `${ISO_TILE_W}%`,
+                height: `${ISO_TILE_H}%`,
               }}
               onClick={() => onCellClick(ref)}
               aria-label={`${r},${c}`}
             />
 
-            {/* Hide the live piece on the target while its move animates. */}
             {!isAnimTarget &&
               faction &&
               cellFigs(
@@ -272,7 +202,11 @@ export default function IsoBoard({
 
             {!isAnimTarget && cell.owner !== null && cell.soldiers > 0 && (
               <span
-                className={`iso-count iso-count--${cell.owner}`}
+                className={cn(
+                  'iso-count absolute -translate-x-1/2 -translate-y-full min-w-6 rounded-full px-[7px] py-px text-center text-[15px] leading-snug font-extrabold text-white tabular-nums shadow-[0_1px_4px_rgba(0,0,0,0.45)]',
+                  cell.owner === 'human' && 'bg-human',
+                  cell.owner === 'bot' && 'bg-bot',
+                )}
                 style={{
                   left: `${fpos.left}%`,
                   top: `${fpos.top - lift}%`,
@@ -286,7 +220,11 @@ export default function IsoBoard({
             {cellFloats.map((f) => (
               <span
                 key={f.id}
-                className={`iso-float iso-float--${cell.owner}`}
+                className={cn(
+                  'pointer-events-none absolute z-[46] rounded-full px-[9px] py-0.5 text-lg leading-tight font-extrabold text-white shadow-[0_2px_6px_rgba(0,0,0,0.4)] animate-float-up-iso',
+                  cell.owner === 'human' && 'bg-human',
+                  cell.owner === 'bot' && 'bg-bot',
+                )}
                 style={{ left: `${pos.left}%`, top: `${pos.top}%` }}
                 onAnimationEnd={() => onIncomeFloatEnd(f.id)}
               >
@@ -297,15 +235,11 @@ export default function IsoBoard({
         );
       })}
 
-      {moveAnim && (
-        <MoveLayer state={state} anim={moveAnim} rotation={rotation} />
-      )}
+      {moveAnim && <MoveLayer state={state} anim={moveAnim} rotation={rotation} />}
     </div>
   );
 }
 
-/** Overlay that plays a move: the defender dies (on a real attack), then the
- *  surviving group rides in. The group's copy count matches who's left. */
 function MoveLayer({
   state,
   anim,
@@ -317,8 +251,8 @@ function MoveLayer({
 }) {
   const fromSlot = rotateRef(anim.from, rotation);
   const toSlot = rotateRef(anim.to, rotation);
-  const from = figCenter(fromSlot.row, fromSlot.col);
-  const to = figCenter(toSlot.row, toSlot.col);
+  const from = isoFigCenter(fromSlot.row, fromSlot.col);
+  const to = isoFigCenter(toSlot.row, toSlot.col);
   const arrived = state.board[anim.to.row][anim.to.col];
   const hold = anim.holdCell;
 
@@ -328,7 +262,6 @@ function MoveLayer({
     hold.owner != null &&
     hold.owner !== anim.player &&
     hold.soldiers > 0;
-  // A friendly move onto your own cell: those troops just stay put underneath.
   const holdStays =
     !killsDefender && !!hold && hold.owner === anim.player && hold.soldiers > 0;
 
@@ -336,17 +269,16 @@ function MoveLayer({
     ? factionOf(hold, state.humanFaction, state.botFaction)
     : null;
 
-  // The riders only set off once the defender is mostly gone.
   const slideDelay = killsDefender ? 220 : 0;
   const adj = soldierSpriteAdjust(anim.faction, anim.flip);
-  const offsets = stackOffsets(arrived.soldiers > 0 ? arrived.soldiers : 1);
+  const offsets = isoStackOffsets(arrived.soldiers > 0 ? arrived.soldiers : 1);
   const soldierSrc = factionAsset(anim.faction, 'soldier');
 
   return (
-    <div className="iso-move-layer">
+    <div className="pointer-events-none absolute inset-0 z-[45]">
       {killsDefender &&
         defenderFaction &&
-        cellFigs(hold!, defenderFaction, to, 'iso-fig--die')}
+        cellFigs(hold!, defenderFaction, to, 'animate-iso-fig-die')}
 
       {holdStays && defenderFaction && cellFigs(hold!, defenderFaction, to)}
 
@@ -355,10 +287,10 @@ function MoveLayer({
           key={`m${i}`}
           left={from.left + dx}
           top={from.top + dy}
-          width={SOLDIER_W * adj.scale}
+          width={ISO_SOLDIER_W * adj.scale}
           src={soldierSrc}
           flip={anim.flip}
-          className="iso-fig--move"
+          className="animate-slide-to"
           z={50 + i}
           style={
             {
@@ -366,7 +298,7 @@ function MoveLayer({
               '--fy': `${from.top + dy}%`,
               '--tx': `${to.left + dx}%`,
               '--ty': `${to.top + dy}%`,
-              '--delay': `${slideDelay}ms`,
+              animationDelay: `${slideDelay}ms`,
             } as CSSProperties
           }
         />

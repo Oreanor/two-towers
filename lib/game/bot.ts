@@ -27,7 +27,7 @@ const BOT_OCCUPY_MIN_SOURCE = 3;
 const MIN_CELLS_BEFORE_FORT = 4;
 
 /** Reinforce the mobilization point closest to the enemy front. */
-export function allocateBotIncome(state: GameState): GameState {
+function allocateBotIncome(state: GameState): GameState {
   if (state.pendingIncome === 0) return { ...state, phase: 'action' };
 
   const self = state.currentPlayer;
@@ -165,7 +165,7 @@ function attackSquadSize(
   return Math.min(maxSend, efficient);
 }
 
-export function chooseBotAction(state: GameState): BotAction {
+function chooseBotAction(state: GameState): BotAction {
   const self = state.currentPlayer;
   const enemy = opponentOf(self);
   const ownCells = getPlayerCells(state.board, self);

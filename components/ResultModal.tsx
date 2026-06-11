@@ -6,9 +6,10 @@ import {
   isBotVsBot,
 } from '@/lib/game/controllers';
 import type { GameState, PlayerId } from '@/lib/game/types';
-import { useAnimatedClose } from './useAnimatedClose';
+import { useAnimatedClose } from '@/components/ui/useAnimatedClose';
+import ModalShell from '@/components/ui/ModalShell';
+import Button from '@/components/ui/Button';
 
-/** End-of-game verdict. Dismissible so the final board can be inspected. */
 export default function ResultModal({
   state,
   winner,
@@ -40,25 +41,15 @@ export default function ResultModal({
       : t('result.lossSub');
 
   return (
-    <div
-      className={`modal-backdrop ${closing ? 'modal-backdrop--out' : ''}`}
-      onClick={close}
-    >
-      <div
-        className={`modal result-modal ${closing ? 'modal--out' : ''}`}
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-      >
-        <div className="result-modal__title">{title}</div>
-        <p className="muted">{subtitle}</p>
-        <button className="btn btn--primary" onClick={onAgain}>
-          {t('result.again')}
-        </button>
-        <button className="btn btn--ghost" onClick={close}>
-          {t('result.viewBoard')}
-        </button>
-      </div>
-    </div>
+    <ModalShell closing={closing} onClose={close} className="text-center">
+      <div className="text-2xl font-extrabold">{title}</div>
+      <p className="text-muted">{subtitle}</p>
+      <Button variant="primary" block onClick={onAgain}>
+        {t('result.again')}
+      </Button>
+      <Button variant="ghost" block onClick={close}>
+        {t('result.viewBoard')}
+      </Button>
+    </ModalShell>
   );
 }

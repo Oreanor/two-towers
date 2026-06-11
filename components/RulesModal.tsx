@@ -13,9 +13,9 @@ import {
   NORMAL_CELL_INCOME,
   STARTING_SOLDIERS,
 } from '@/lib/game/constants';
-import { useAnimatedClose } from './useAnimatedClose';
+import { useAnimatedClose } from '@/components/ui/useAnimatedClose';
+import ModalShell from '@/components/ui/ModalShell';
 
-/** Turn `**emphasis**` markers in rules copy into <strong>. */
 function formatRulesLine(line: string) {
   const parts = line.split(/(\*\*.+?\*\*)/g);
   return parts.map((part, i) => {
@@ -26,9 +26,6 @@ function formatRulesLine(line: string) {
   });
 }
 
-/** Modal showing the game rules, opened from the "?" button in the header. The
- *  body is one i18n string with paragraphs separated by newlines; the numbers
- *  come straight from the game constants. */
 export default function RulesModal({ onClose }: { onClose: () => void }) {
   const { t } = useI18n();
   const { closing, close } = useAnimatedClose(onClose);
@@ -47,26 +44,21 @@ export default function RulesModal({ onClose }: { onClose: () => void }) {
     .filter((line) => line.trim() !== '');
 
   return (
-    <div
-      className={`modal-backdrop ${closing ? 'modal-backdrop--out' : ''}`}
-      onClick={close}
+    <ModalShell
+      closing={closing}
+      onClose={close}
+      wide
+      ariaLabel={t('rules.title')}
+      className="items-stretch text-left"
     >
-      <div
-        className={`modal rules-modal ${closing ? 'modal--out' : ''}`}
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('rules.title')}
-      >
-        <h3>{t('rules.title')}</h3>
-        <div className="rules-modal__body">
-          {paragraphs.map((line, i) => (
-            <p key={i} className="muted">
-              {formatRulesLine(line)}
-            </p>
-          ))}
-        </div>
+      <h3 className="m-0">{t('rules.title')}</h3>
+      <div className="max-h-[min(60vh,460px)] overflow-y-auto text-sm leading-normal">
+        {paragraphs.map((line, i) => (
+          <p key={i} className="mb-2.5 text-muted last:mb-0 [&_strong]:font-bold [&_strong]:text-fg">
+            {formatRulesLine(line)}
+          </p>
+        ))}
       </div>
-    </div>
+    </ModalShell>
   );
 }

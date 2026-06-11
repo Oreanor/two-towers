@@ -1,60 +1,63 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { BarChart3, HelpCircle } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
+import { cn } from '@/lib/cn';
+import IconButton from '@/components/ui/IconButton';
+import RulesModal from '@/components/RulesModal';
 import UserMenu from './UserMenu';
 
-/** The single, invariant app header used on every screen: logo (click → lobby),
- *  stats, help and the settings menu. */
 export default function AppHeader({
   name,
   onLogout,
-  onHelp,
   className,
 }: {
   name?: string;
   onLogout: () => void;
-  onHelp: () => void;
   className?: string;
 }) {
   const router = useRouter();
   const { t } = useI18n();
+  const [rulesOpen, setRulesOpen] = useState(false);
+
   return (
-    <header className={`topbar${className ? ` ${className}` : ''}`}>
-      <button
-        className="topbar__logo-btn"
-        onClick={() => router.push('/')}
-        aria-label="Two Towers"
-        title="Two Towers"
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          className="topbar__logo logo-img"
-          src="/assets/logo.png"
-          alt="Two Towers"
-          draggable={false}
-        />
-      </button>
-      <div className="topbar__right">
+    <>
+      <header className={cn('flex items-center justify-between gap-2', className)}>
         <button
-          className="icon-btn"
-          onClick={() => router.push('/stats')}
-          aria-label={t('stats.title')}
-          title={t('stats.title')}
+          className="flex cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-[17px] font-extrabold tracking-wide text-fg"
+          onClick={() => router.push('/')}
+          aria-label="Two Towers"
+          title="Two Towers"
         >
-          <BarChart3 size={18} />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            className="block h-7 w-auto invert [[data-theme=light]_&]:invert-0"
+            src="/assets/logo.png"
+            alt="Two Towers"
+            draggable={false}
+          />
         </button>
-        <button
-          className="icon-btn"
-          onClick={onHelp}
-          aria-label={t('lobby.help')}
-          title={t('lobby.help')}
-        >
-          <HelpCircle size={18} />
-        </button>
-        <UserMenu name={name} onLogout={onLogout} />
-      </div>
-    </header>
+        <div className="flex items-center gap-2.5">
+          <IconButton
+            onClick={() => router.push('/stats')}
+            aria-label={t('stats.title')}
+            title={t('stats.title')}
+          >
+            <BarChart3 size={18} />
+          </IconButton>
+          <IconButton
+            onClick={() => setRulesOpen(true)}
+            aria-label={t('lobby.help')}
+            title={t('lobby.help')}
+          >
+            <HelpCircle size={18} />
+          </IconButton>
+          <UserMenu name={name} onLogout={onLogout} />
+        </div>
+      </header>
+      {rulesOpen && <RulesModal onClose={() => setRulesOpen(false)} />}
+    </>
   );
 }

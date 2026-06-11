@@ -1,11 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { useAnimatedClose } from './useAnimatedClose';
+import { useAnimatedClose } from '@/components/ui/useAnimatedClose';
 import { useI18n } from '@/lib/i18n';
+import { cn } from '@/lib/cn';
+import ModalShell from '@/components/ui/ModalShell';
+import ModalActions from '@/components/ui/ModalActions';
+import ToggleButton from '@/components/ui/ToggleButton';
+import FactionShield from '@/components/ui/FactionShield';
 import {
   FACTIONS,
-  factionAsset,
   type FactionId,
 } from '@/lib/game/factions';
 import type { ControllerKind } from '@/lib/game/types';
@@ -58,37 +62,27 @@ export default function SideSelectModal({
     otherFaction: FactionId,
   ) {
     return (
-      <div className="side-select-modal__section">
-        <h4 className="side-select-modal__label">
+      <div className="mt-1 first:mt-0">
+        <h4 className="mb-2 text-center text-[13px] font-bold tracking-wide text-muted uppercase">
           {boardSide === 'human' ? t('lobby.sideLeft') : t('lobby.sideRight')}
         </h4>
-        <div className="side-select-modal__controller">
-          <button
-            type="button"
-            className={`side-select-modal__ctrl${
-              setup.controller === 'human'
-                ? ' side-select-modal__ctrl--selected'
-                : ''
-            }`}
+        <div className="mb-2.5 flex gap-2">
+          <ToggleButton
+            selected={setup.controller === 'human'}
             onClick={() => setController(boardSide, 'human')}
             aria-pressed={setup.controller === 'human'}
           >
             {t('lobby.playerHuman')}
-          </button>
-          <button
-            type="button"
-            className={`side-select-modal__ctrl${
-              setup.controller === 'ai'
-                ? ' side-select-modal__ctrl--selected'
-                : ''
-            }`}
+          </ToggleButton>
+          <ToggleButton
+            selected={setup.controller === 'ai'}
             onClick={() => setController(boardSide, 'ai')}
             aria-pressed={setup.controller === 'ai'}
           >
             {t('lobby.playerBot')}
-          </button>
+          </ToggleButton>
         </div>
-        <div className="side-select-modal__grid">
+        <div className="grid grid-cols-3 gap-2.5">
           {FACTIONS.map((faction) => {
             const isTaken = faction === otherFaction;
             const isSelected = faction === setup.faction;
@@ -96,21 +90,25 @@ export default function SideSelectModal({
               <button
                 key={faction}
                 type="button"
-                className={`side-select-modal__item${
-                  isSelected ? ' side-select-modal__item--selected' : ''
-                }${isTaken ? ' side-select-modal__item--taken' : ''}`}
+                className={cn(
+                  'flex cursor-pointer flex-col items-center gap-1.5 rounded-xl border-2 border-transparent bg-white/4 p-2.5 px-1.5 transition',
+                  isSelected && 'border-accent bg-selected/8',
+                  isTaken && 'cursor-not-allowed opacity-35',
+                )}
                 onClick={() => !isTaken && setFaction(boardSide, faction)}
                 disabled={isTaken}
                 aria-pressed={isSelected}
                 aria-label={t(`factions.${faction}`)}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={factionAsset(faction, 'shield')}
-                  alt=""
-                  draggable={false}
-                />
-                <span>{t(`factions.${faction}`)}</span>
+                <FactionShield faction={faction} size="lg" />
+                <span
+                  className={cn(
+                    'text-center text-[11px] leading-tight font-semibold text-muted',
+                    isSelected && 'text-fg',
+                  )}
+                >
+                  {t(`factions.${faction}`)}
+                </span>
               </button>
             );
           })}
@@ -120,36 +118,27 @@ export default function SideSelectModal({
   }
 
   return (
-    <div
-      className={`modal-backdrop ${closing ? 'modal-backdrop--out' : ''}`}
-      onClick={close}
+    <ModalShell
+      closing={closing}
+      onClose={close}
+      className="max-w-[min(92vw,420px)] items-stretch"
     >
-      <div
-        className={`modal side-select-modal ${closing ? 'modal--out' : ''}`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 className="side-select-modal__title">{t('lobby.pickSides')}</h3>
-        {renderSide('human', left, right.faction)}
-        {renderSide('bot', right, left.faction)}
-        <div className="create-actions">
-          <button className="btn btn--ghost" onClick={close}>
-            {t('lobby.cancel')}
-          </button>
-          <button
-            className="btn btn--primary"
-            onClick={() =>
-              onConfirm({
-                humanFaction: left.faction,
-                botFaction: right.faction,
-                humanController: left.controller,
-                botController: right.controller,
-              })
-            }
-          >
-            {t('lobby.startGame')}
-          </button>
-        </div>
-      </div>
-    </div>
+      <h3 className="m-0 text-center">{t('lobby.pickSides')}</h3>
+      {renderSide('human', left, right.faction)}
+      {renderSide('bot', right, left.faction)}
+      <ModalActions
+        cancelLabel={t('lobby.cancel')}
+        confirmLabel={t('lobby.startGame')}
+        onCancel={close}
+        onConfirm={() =>
+          onConfirm({
+            humanFaction: left.faction,
+            botFaction: right.faction,
+            humanController: left.controller,
+            botController: right.controller,
+          })
+        }
+      />
+    </ModalShell>
   );
 }

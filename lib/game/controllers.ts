@@ -1,5 +1,4 @@
 import type { ControllerKind, GameState, PlayerId } from './types';
-import { opponentOf } from './selectors';
 
 export function controllerOf(
   state: GameState,
@@ -17,10 +16,6 @@ export function humanControlledSide(state: GameState): PlayerId | null {
   if (state.humanController === 'human') return 'human';
   if (state.botController === 'human') return 'bot';
   return null;
-}
-
-export function hasHumanPlayer(state: GameState): boolean {
-  return humanControlledSide(state) !== null;
 }
 
 export function isBotVsBot(state: GameState): boolean {
@@ -57,5 +52,3 @@ export function sideDisplayName(
   if (controllerOf(state, player) === 'human') return youName;
   return t('common.bot');
 }
-
-export { opponentOf };

@@ -2,10 +2,10 @@
 
 import { useState } from 'react';
 import { useI18n } from '@/lib/i18n';
-import { useAnimatedClose } from './useAnimatedClose';
+import { useAnimatedClose } from '@/components/ui/useAnimatedClose';
+import ModalShell from '@/components/ui/ModalShell';
+import ModalActions from '@/components/ui/ModalActions';
 
-/** Slider dialog used for every soldier-count choice: how many reinforcements
- *  to drop on a castle, or how many soldiers march to the target cell. */
 export default function AmountModal({
   title,
   hint,
@@ -24,11 +24,8 @@ export default function AmountModal({
   min: number;
   max: number;
   initial: number;
-  /** Right edge of the slider — the chosen amount (e.g. "Пойдёт"). */
   goLabel: string;
-  /** Left edge of the slider — what's left behind (e.g. "Останется"). */
   stayLabel: string;
-  /** The pool the amount is taken from; "stay" shows stayBase − value. */
   stayBase: number;
   confirmLabel: string;
   onConfirm: (n: number) => void;
@@ -41,51 +38,38 @@ export default function AmountModal({
   );
 
   return (
-    <div
-      className={`modal-backdrop ${closing ? 'modal-backdrop--out' : ''}`}
-      onClick={close}
-    >
-      <div
-        className={`modal amount-modal ${closing ? 'modal--out' : ''}`}
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-      >
-        <h3 className="amount-modal__title">{title}</h3>
-        {hint && <p className="muted tiny amount-modal__hint">{hint}</p>}
+    <ModalShell closing={closing} onClose={close} ariaLabel={title} className="items-stretch text-center">
+      <h3 className="m-0">{title}</h3>
+      {hint && <p className="m-0 text-xs text-muted">{hint}</p>}
 
-        <div className="amount-modal__ends">
-          <div className="amount-modal__end">
-            <span className="muted tiny">{stayLabel}</span>
-            <strong>{stayBase - value}</strong>
-          </div>
-          <div className="amount-modal__end amount-modal__end--right">
-            <span className="muted tiny">{goLabel}</span>
-            <strong>{value}</strong>
-          </div>
+      <div className="-mb-1.5 flex justify-between gap-3">
+        <div className="flex flex-col items-start gap-0.5 text-left">
+          <span className="text-xs text-muted">{stayLabel}</span>
+          <strong className="text-lg tabular-nums">{stayBase - value}</strong>
         </div>
-
-        <input
-          className="amount-modal__slider"
-          type="range"
-          min={min}
-          max={max}
-          value={value}
-          onChange={(e) => setValue(Number(e.target.value))}
-          disabled={min === max}
-          aria-label={goLabel}
-        />
-
-        <div className="create-actions">
-          <button className="btn btn--ghost" onClick={close}>
-            {t('lobby.cancel')}
-          </button>
-          <button className="btn btn--primary" onClick={() => onConfirm(value)}>
-            {confirmLabel}
-          </button>
+        <div className="flex flex-col items-end gap-0.5 text-right">
+          <span className="text-xs text-muted">{goLabel}</span>
+          <strong className="text-lg tabular-nums">{value}</strong>
         </div>
       </div>
-    </div>
+
+      <input
+        className="w-full cursor-pointer accent-accent disabled:cursor-default disabled:opacity-60"
+        type="range"
+        min={min}
+        max={max}
+        value={value}
+        onChange={(e) => setValue(Number(e.target.value))}
+        disabled={min === max}
+        aria-label={goLabel}
+      />
+
+      <ModalActions
+        cancelLabel={t('lobby.cancel')}
+        confirmLabel={confirmLabel}
+        onCancel={close}
+        onConfirm={() => onConfirm(value)}
+      />
+    </ModalShell>
   );
 }

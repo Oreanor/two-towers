@@ -1,34 +1,30 @@
 'use client';
 
-import { RotateCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AmountModal from '@/components/AmountModal';
 import AppHeader from '@/components/AppHeader';
-import Board, { type MoveAnim } from '@/components/Board';
-import IsoBoard from '@/components/IsoBoard';
 import ResultModal from '@/components/ResultModal';
-import RulesModal from '@/components/RulesModal';
 import Scoreboard from '@/components/Scoreboard';
+import Button from '@/components/ui/Button';
+import ScreenLayout from '@/components/ui/ScreenLayout';
+import type { IncomeFloat, MoveAnim } from '@/components/board/types';
+import GameBoardArea from '@/components/screens/game/GameBoardArea';
+import GameHintBar from '@/components/screens/game/GameHintBar';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { useI18n } from '@/lib/i18n';
+import { cn } from '@/lib/cn';
 import { useBoardView } from '@/lib/view';
 import { executeBotTurn } from '@/lib/game/bot';
 import {
   controllerOf,
   humanControlledSide,
   isAiControlled,
-  isBotVsBot,
-  resolveControllers,
   statsResultForHuman,
 } from '@/lib/game/controllers';
 import { FORT_COST } from '@/lib/game/constants';
-import {
-  nextRotation,
-  type BoardRotation,
-} from '@/lib/game/boardRotation';
-import { createInitialState } from '@/lib/game/initialState';
-import { resolveFactions } from '@/lib/game/factions';
+import { type BoardRotation } from '@/lib/game/boardRotation';
+import { gameHintText, isHumanTurn } from '@/lib/game/gameHint';
 import {
   attackCell,
   buildFort,
@@ -42,7 +38,6 @@ import {
   moveSoldiers,
   occupyNeutralCell,
   placeIncome,
-  startTurn,
 } from '@/lib/game/rules';
 import {
   autoCastleIncome,
@@ -53,8 +48,8 @@ import {
   opponentOf,
   refOf,
 } from '@/lib/game/selectors';
+import { newGameFrom, normalizeState } from '@/lib/game/session';
 import type { CellRef, GameState } from '@/lib/game/types';
-import type { IncomeFloat } from '@/components/CellView';
 import {
   getGame,
   recordResult,
@@ -62,37 +57,9 @@ import {
   type SavedGame,
 } from '@/lib/storage/games';
 
-// A bot pauses to "think" before acting (random, so it feels less robotic) and
-// settles briefly after, so consecutive bot moves don't blur together.
 const AI_BEFORE_MIN_MS = 450;
 const AI_BEFORE_MAX_MS = 900;
 const AI_AFTER_MS = 350;
-
-function newGame(prev: GameState): GameState {
-  const { humanFaction, botFaction } = resolveFactions(prev);
-  const { humanController, botController } = resolveControllers(prev);
-  return startTurn(
-    createInitialState(
-      humanFaction,
-      botFaction,
-      humanController,
-      botController,
-    ),
-    'human',
-  );
-}
-
-function normalizeState(state: GameState): GameState {
-  const { humanFaction, botFaction } = resolveFactions(state);
-  const { humanController, botController } = resolveControllers(state);
-  return {
-    ...state,
-    humanFaction,
-    botFaction,
-    humanController,
-    botController,
-  };
-}
 
 export default function GameScreen({ gameId }: { gameId: string }) {
   const { user, logout } = useAuth();
@@ -106,15 +73,12 @@ export default function GameScreen({ gameId }: { gameId: string }) {
   const [pendingTarget, setPendingTarget] = useState<CellRef | null>(null);
   const [allocTarget, setAllocTarget] = useState<CellRef | null>(null);
   const autoAllocTurnRef = useRef<string | null>(null);
-  // Timestamp of the last committed bot move, for the post-move settle delay.
   const lastAiCommitRef = useRef(0);
   const [incomeFloats, setIncomeFloats] = useState<IncomeFloat[]>([]);
   const [boardRotation, setBoardRotation] = useState<BoardRotation>(0);
   const [moveAnim, setMoveAnim] = useState<MoveAnim | null>(null);
   const animatedMoveRef = useRef(0);
-  // The previously committed state, for reading a move's pre-move target cell.
   const prevStateRef = useRef<GameState | null>(null);
-  const [rulesOpen, setRulesOpen] = useState(false);
   const [resultClosed, setResultClosed] = useState(false);
 
   useEffect(() => {
@@ -122,7 +86,6 @@ export default function GameScreen({ gameId }: { gameId: string }) {
     const normalized = game
       ? { ...game, state: normalizeState(game.state) }
       : null;
-    // Treat a move already present in the loaded game as "seen".
     animatedMoveRef.current = normalized?.state.lastMove?.id ?? 0;
     setEnvelope(normalized);
     setLoaded(true);
@@ -153,9 +116,8 @@ export default function GameScreen({ gameId }: { gameId: string }) {
   }, []);
 
   const state = envelope?.state ?? null;
-
-  // Slide a sprite from source to target whenever a fresh move appears.
   const lastMove = state?.lastMove ?? null;
+
   useEffect(() => {
     if (!state || !lastMove || animatedMoveRef.current === lastMove.id) return;
     animatedMoveRef.current = lastMove.id;
@@ -173,16 +135,13 @@ export default function GameScreen({ gameId }: { gameId: string }) {
       flip: lastMove.player === 'human',
       holdCell,
     });
-    // A defender that has to die first (attack on an occupied enemy cell) makes
-    // the 3D sequence longer.
     const killsDefender =
       lastMove.kind === 'attack' &&
       !!holdCell &&
       holdCell.owner != null &&
       holdCell.owner !== lastMove.player &&
       holdCell.soldiers > 0;
-    const duration =
-      view === '3d' ? (killsDefender ? 1160 : 940) : 940;
+    const duration = view === '3d' ? (killsDefender ? 1160 : 940) : 940;
     const timer = setTimeout(
       () => setMoveAnim((m) => (m && m.id === lastMove.id ? null : m)),
       duration,
@@ -191,26 +150,20 @@ export default function GameScreen({ gameId }: { gameId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastMove?.id]);
 
-  // Remember the committed state so the next move can read its pre-move target.
-  // Declared after the animation effect so that one reads the prior value first.
   useEffect(() => {
     prevStateRef.current = state;
   }, [state]);
+
   const activePlayer = state?.currentPlayer ?? null;
   const userSide = state ? humanControlledSide(state) : null;
-  const isUserTurn =
-    !!state &&
-    !!activePlayer &&
-    controllerOf(state, activePlayer) === 'human';
-  const isUserActing = isUserTurn && state!.phase === 'action';
-  const isUserAllocating = isUserTurn && state!.phase === 'allocate';
+  const userTurn = state ? isHumanTurn(state) : false;
+  const isUserActing = userTurn && state!.phase === 'action';
+  const isUserAllocating = userTurn && state!.phase === 'allocate';
 
   useEffect(() => {
     if (!state || state.phase === 'gameOver') return;
     if (!isAiControlled(state, state.currentPlayer)) return;
     const snapshot = state;
-    // Wait out any remaining settle from the previous bot move, then a random
-    // "thinking" pause before this one acts.
     const afterRemaining = Math.max(
       0,
       AI_AFTER_MS - (Date.now() - lastAiCommitRef.current),
@@ -246,8 +199,7 @@ export default function GameScreen({ gameId }: { gameId: string }) {
     if (state?.phase !== 'gameOver') setResultClosed(false);
   }, [state?.phase]);
 
-  const sourceCell =
-    state && selected ? getCell(state.board, selected) : null;
+  const sourceCell = state && selected ? getCell(state.board, selected) : null;
 
   const legalTargets = useMemo(() => {
     if (!state || !isUserActing || !selected || !sourceCell || !activePlayer)
@@ -269,7 +221,7 @@ export default function GameScreen({ gameId }: { gameId: string }) {
   }, [state, isUserAllocating, activePlayer]);
 
   useEffect(() => {
-    if (!state || state.phase !== 'allocate' || !isUserTurn) return;
+    if (!state || state.phase !== 'allocate' || !userTurn) return;
     if (!incomeTargetIsCastleOnly(state.board, state.currentPlayer)) return;
     if (state.pendingIncome <= 0) return;
 
@@ -282,7 +234,7 @@ export default function GameScreen({ gameId }: { gameId: string }) {
     const amount = state.pendingIncome;
     addIncomeFloat(ref, amount);
     updateState((s) => placeIncome(s, ref, amount));
-  }, [state, isUserTurn, updateState, addIncomeFloat]);
+  }, [state, userTurn, updateState, addIncomeFloat]);
 
   function finishUserAction(next: GameState) {
     setSelected(null);
@@ -291,8 +243,7 @@ export default function GameScreen({ gameId }: { gameId: string }) {
   }
 
   function handleCellClick(ref: CellRef) {
-    if (!state || !activePlayer || state.phase === 'gameOver' || !isUserTurn)
-      return;
+    if (!state || !activePlayer || state.phase === 'gameOver' || !userTurn) return;
 
     if (isUserAllocating) {
       if (incomeTargetIsCastleOnly(state.board, activePlayer)) return;
@@ -365,49 +316,29 @@ export default function GameScreen({ gameId }: { gameId: string }) {
     setResultClosed(false);
     setEnvelope((prev) =>
       prev
-        ? saveGame({ ...prev, state: newGame(prev.state), resultRecorded: false })
+        ? saveGame({ ...prev, state: newGameFrom(prev.state), resultRecorded: false })
         : prev,
     );
   }
 
   if (!loaded) {
     return (
-      <div className="screen screen--center">
-        <p className="muted">{t('common.loading')}</p>
-      </div>
+      <ScreenLayout centered>
+        <p className="text-muted">{t('common.loading')}</p>
+      </ScreenLayout>
     );
   }
 
   if (!state) {
     return (
-      <div className="screen screen--center">
-        <p className="muted">{t('game.notFound')}</p>
-        <button className="btn" onClick={() => router.push('/')}>
-          {t('game.toLobby')}
-        </button>
-      </div>
+      <ScreenLayout centered className="gap-4">
+        <p className="text-muted">{t('game.notFound')}</p>
+        <Button onClick={() => router.push('/')}>{t('game.toLobby')}</Button>
+      </ScreenLayout>
     );
   }
 
-  const hint =
-    state.phase === 'gameOver'
-      ? userSide && state.winner === userSide
-        ? t('result.win')
-        : userSide && state.winner === opponentOf(userSide)
-          ? t('result.loss')
-          : state.winner
-            ? t('game.autoBattleOver')
-            : t('result.loss')
-      : isAiControlled(state, state.currentPlayer)
-        ? isBotVsBot(state)
-          ? t('game.autoBattle')
-          : t('game.botThinking')
-        : state.phase === 'allocate'
-          ? t('game.hintAllocate', { n: state.pendingIncome })
-          : selected
-            ? t('game.hintTarget')
-            : t('game.hintSelect');
-
+  const hint = gameHintText(state, selected !== null, t);
   const showFortButton =
     isUserActing && selected !== null && canBuildFort(state, selected);
   const showPlayAgain = state.phase === 'gameOver' && resultClosed;
@@ -415,7 +346,7 @@ export default function GameScreen({ gameId }: { gameId: string }) {
     state.phase === 'gameOver' && state.winner !== null && !resultClosed;
 
   const targetCell =
-    state && pendingTarget ? getCell(state.board, pendingTarget) : null;
+    pendingTarget ? getCell(state.board, pendingTarget) : null;
   const moveModal =
     sourceCell && targetCell && activePlayer
       ? targetCell.owner === opponentOf(activePlayer)
@@ -430,85 +361,47 @@ export default function GameScreen({ gameId }: { gameId: string }) {
       : null;
 
   return (
-    <div className={`screen screen--game screen--${view}`}>
-      <AppHeader
-        name={user?.name}
-        onLogout={logout}
-        onHelp={() => setRulesOpen(true)}
-        className="game-topbar"
-      />
+    <div
+      className={cn(
+        'flex min-h-dvh w-full max-w-[min(96vw,1100px)] flex-col items-center gap-3 px-4 pt-4 pb-[calc(16px+env(safe-area-inset-bottom))]',
+        view === '2d' && 'max-w-[520px] [--game-column-w:min(480px,92vw)]',
+        view === '3d' && '[--game-column-w:96vw] md:[--game-column-w:min(72vw,1200px)]',
+      )}
+    >
+      <AppHeader name={user?.name} onLogout={logout} className="w-[var(--game-column-w)]" />
 
       <Scoreboard state={state} youName={user?.name ?? t('common.you')} />
 
-      <div className="statusbar">
-        <p className="statusbar__hint">{hint}</p>
-        <div className="statusbar__actions">
-          {showFortButton && (
-            <button className="btn btn--sm" onClick={handleBuildFort}>
-              {t('game.buildFort', { cost: FORT_COST })}
-            </button>
-          )}
-          {isUserActing && (
-            <button className="btn btn--sm btn--ghost" onClick={handlePass}>
-              {t('game.pass')}
-            </button>
-          )}
-          {showPlayAgain && (
-            <button
-              className="btn btn--sm btn--primary"
-              onClick={handleRestart}
-            >
-              {t('result.again')}
-            </button>
-          )}
-        </div>
-      </div>
+      <GameHintBar
+        hint={hint}
+        showFortButton={showFortButton}
+        showPass={isUserActing}
+        showPlayAgain={showPlayAgain}
+        onBuildFort={handleBuildFort}
+        onPass={handlePass}
+        onPlayAgain={handleRestart}
+        buildFortLabel={t('game.buildFort', { cost: FORT_COST })}
+        passLabel={t('game.pass')}
+        playAgainLabel={t('result.again')}
+      />
 
-      <div className="game-column">
-        <div className="board-stage">
-          <div className="board-stage__board">
-            {view === '3d' ? (
-              <IsoBoard
-                state={state}
-                selected={selected}
-                legalTargets={legalTargets}
-                mobilizationTargets={mobilizationTargets}
-                incomeFloats={incomeFloats}
-                moveAnim={moveAnim}
-                rotation={boardRotation}
-                userSide={userSide}
-                onIncomeFloatEnd={removeIncomeFloat}
-                onCellClick={handleCellClick}
-              />
-            ) : (
-              <Board
-                state={state}
-                selected={selected}
-                legalTargets={legalTargets}
-                mobilizationTargets={mobilizationTargets}
-                incomeFloats={incomeFloats}
-                moveAnim={moveAnim}
-                rotation={boardRotation}
-                onIncomeFloatEnd={removeIncomeFloat}
-                onCellClick={handleCellClick}
-              />
-            )}
-            {view === '3d' && (
-              <button
-                type="button"
-                className="icon-btn board-stage__rotate"
-                onClick={() => setBoardRotation((r) => nextRotation(r))}
-                aria-label={t('game.rotateBoard')}
-                title={t('game.rotateBoard')}
-              >
-                <RotateCw size={18} />
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
+      <GameBoardArea
+        view={view}
+        state={state}
+        selected={selected}
+        legalTargets={legalTargets}
+        mobilizationTargets={mobilizationTargets}
+        incomeFloats={incomeFloats}
+        moveAnim={moveAnim}
+        rotation={boardRotation}
+        userSide={userSide}
+        onRotationChange={setBoardRotation}
+        onIncomeFloatEnd={removeIncomeFloat}
+        onCellClick={handleCellClick}
+        rotateLabel={t('game.rotateBoard')}
+      />
 
-      {allocTarget && state && (
+      {allocTarget && (
         <AmountModal
           title={t('game.allocateTitle')}
           min={1}
@@ -551,8 +444,6 @@ export default function GameScreen({ gameId }: { gameId: string }) {
           onClose={() => setResultClosed(true)}
         />
       )}
-
-      {rulesOpen && <RulesModal onClose={() => setRulesOpen(false)} />}
     </div>
   );
 }
