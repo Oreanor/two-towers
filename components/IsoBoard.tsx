@@ -5,16 +5,17 @@ import { cn } from '@/lib/cn';
 import { includesRef, factionOf } from '@/lib/game/boardUi';
 import { rotateRef, type BoardRotation } from '@/lib/game/boardRotation';
 import {
-  isoCellCenter,
   isoFigCenter,
   isoStackOffsets,
+  isoTileCenter,
   isoTileHighlight,
+  isoTileOwner,
   ISO_CASTLE_LIFT,
   ISO_CASTLE_W,
   ISO_FORT_W,
   ISO_SOLDIER_W,
-  ISO_TILE_H,
-  ISO_TILE_W,
+  ISO_TILE_H_ADJ,
+  ISO_TILE_W_ADJ,
 } from '@/lib/game/isoLayout';
 import { factionAsset, soldierSpriteAdjust } from '@/lib/game/factions';
 import type { Cell, CellRef, GameState, PlayerId } from '@/lib/game/types';
@@ -154,7 +155,7 @@ export default function IsoBoard({
         const cell = state.board[r][c];
         const ref = { row: r, col: c };
         const slot = rotateRef(ref, rotation);
-        const pos = isoCellCenter(slot.row, slot.col);
+        const tilePos = isoTileCenter(slot.row, slot.col);
         const isSelected = !!(selected && selected.row === r && selected.col === c);
         const isLegal = includesRef(legalTargets, ref);
         const isMobilize = includesRef(mobilizationTargets, ref);
@@ -176,14 +177,15 @@ export default function IsoBoard({
           >
             <button
               className={cn(
-                'iso-tile pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer border-none bg-transparent p-0 transition-colors [clip-path:polygon(50%_0,100%_50%,50%_100%,0_50%)]',
+                'iso-tile pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer border-none p-0 transition-colors [clip-path:polygon(50%_0,100%_50%,50%_100%,0_50%)]',
+                isoTileOwner(cell.owner),
                 isoTileHighlight(isSelected, isLegal, isMobilize),
               )}
               style={{
-                left: `${pos.left}%`,
-                top: `${pos.top}%`,
-                width: `${ISO_TILE_W}%`,
-                height: `${ISO_TILE_H}%`,
+                left: `${tilePos.left}%`,
+                top: `${tilePos.top}%`,
+                width: `${ISO_TILE_W_ADJ}%`,
+                height: `${ISO_TILE_H_ADJ}%`,
               }}
               onClick={() => onCellClick(ref)}
               aria-label={`${r},${c}`}
@@ -225,7 +227,7 @@ export default function IsoBoard({
                   cell.owner === 'human' && 'bg-human',
                   cell.owner === 'bot' && 'bg-bot',
                 )}
-                style={{ left: `${pos.left}%`, top: `${pos.top}%` }}
+                style={{ left: `${tilePos.left}%`, top: `${tilePos.top}%` }}
                 onAnimationEnd={() => onIncomeFloatEnd(f.id)}
               >
                 +{f.amount}

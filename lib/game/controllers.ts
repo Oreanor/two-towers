@@ -32,17 +32,6 @@ export function resolveControllers(state: {
   };
 }
 
-/** Map game winner to stats bucket for the human at the keyboard. */
-export function statsResultForHuman(
-  state: GameState,
-): 'human' | 'bot' | null | 'skip' {
-  const userSide = humanControlledSide(state);
-  if (!userSide) return 'skip';
-  const { winner } = state;
-  if (winner === null) return null;
-  return winner === userSide ? 'human' : 'bot';
-}
-
 export function sideDisplayName(
   state: GameState,
   player: PlayerId,

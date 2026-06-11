@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Check } from 'lucide-react';
 import { useAnimatedClose } from '@/components/ui/useAnimatedClose';
 import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/cn';
@@ -91,8 +92,10 @@ export default function SideSelectModal({
                 key={faction}
                 type="button"
                 className={cn(
-                  'flex cursor-pointer flex-col items-center gap-1.5 rounded-xl border-2 border-transparent bg-white/4 p-2.5 px-1.5 transition',
-                  isSelected && 'border-accent bg-selected/8',
+                  'relative flex cursor-pointer flex-col items-center gap-1.5 rounded-xl border-[3px] p-2 px-1.5 transition-colors',
+                  isSelected
+                    ? 'border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_20%,transparent)]'
+                    : 'border-[var(--btn-border)] bg-white/5 hover:border-[var(--muted)]',
                   isTaken && 'cursor-not-allowed opacity-35',
                 )}
                 onClick={() => !isTaken && setFaction(boardSide, faction)}
@@ -100,11 +103,19 @@ export default function SideSelectModal({
                 aria-pressed={isSelected}
                 aria-label={t(`factions.${faction}`)}
               >
+                {isSelected && (
+                  <span
+                    className="absolute top-1 right-1 flex size-[18px] items-center justify-center rounded-full bg-accent text-accent-fg"
+                    aria-hidden
+                  >
+                    <Check size={11} strokeWidth={3} />
+                  </span>
+                )}
                 <FactionShield faction={faction} size="lg" />
                 <span
                   className={cn(
                     'text-center text-[11px] leading-tight font-semibold text-muted',
-                    isSelected && 'text-fg',
+                    isSelected && 'font-bold text-fg',
                   )}
                 >
                   {t(`factions.${faction}`)}

@@ -20,7 +20,6 @@ import {
   controllerOf,
   humanControlledSide,
   isAiControlled,
-  statsResultForHuman,
 } from '@/lib/game/controllers';
 import { FORT_COST } from '@/lib/game/constants';
 import { type BoardRotation } from '@/lib/game/boardRotation';
@@ -52,7 +51,6 @@ import { newGameFrom, normalizeState } from '@/lib/game/session';
 import type { CellRef, GameState } from '@/lib/game/types';
 import {
   getGame,
-  recordResult,
   saveGame,
   type SavedGame,
 } from '@/lib/storage/games';
@@ -184,18 +182,6 @@ export default function GameScreen({ gameId }: { gameId: string }) {
   }, [state, updateState, addIncomeFloat]);
 
   useEffect(() => {
-    if (!envelope || envelope.state.phase !== 'gameOver' || envelope.resultRecorded)
-      return;
-    const bucket = statsResultForHuman(envelope.state);
-    if (bucket !== 'skip') recordResult(bucket);
-    setEnvelope((prev) =>
-      prev && !prev.resultRecorded
-        ? saveGame({ ...prev, resultRecorded: true })
-        : prev,
-    );
-  }, [envelope]);
-
-  useEffect(() => {
     if (state?.phase !== 'gameOver') setResultClosed(false);
   }, [state?.phase]);
 
@@ -315,9 +301,7 @@ export default function GameScreen({ gameId }: { gameId: string }) {
     animatedMoveRef.current = 0;
     setResultClosed(false);
     setEnvelope((prev) =>
-      prev
-        ? saveGame({ ...prev, state: newGameFrom(prev.state), resultRecorded: false })
-        : prev,
+      prev ? saveGame({ ...prev, state: newGameFrom(prev.state) }) : prev,
     );
   }
 

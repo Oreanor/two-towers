@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { BarChart3, HelpCircle } from 'lucide-react';
+import { HelpCircle } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/cn';
 import IconButton from '@/components/ui/IconButton';
@@ -40,13 +40,6 @@ export default function AppHeader({
           />
         </button>
         <div className="flex items-center gap-2.5">
-          <IconButton
-            onClick={() => router.push('/stats')}
-            aria-label={t('stats.title')}
-            title={t('stats.title')}
-          >
-            <BarChart3 size={18} />
-          </IconButton>
           <IconButton
             onClick={() => setRulesOpen(true)}
             aria-label={t('lobby.help')}

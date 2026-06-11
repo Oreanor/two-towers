@@ -29,8 +29,8 @@
     "view3d": "3D",
     "logout": "Sign out",
     "pickSides": "Choose sides",
-    "sideLeft": "Lower-left corner",
-    "sideRight": "Upper-right corner",
+    "sideLeft": "First player",
+    "sideRight": "Second player",
     "playerHuman": "Human",
     "playerBot": "Bot",
     "startGame": "Start game"
@@ -46,14 +46,6 @@
   "status": {
     "active": "in progress",
     "over": "finished"
-  },
-  "stats": {
-    "title": "Statistics",
-    "player": "Player",
-    "wins": "Wins",
-    "losses": "Losses",
-    "draws": "Draws",
-    "empty": "No finished games yet."
   },
   "rules": {
     "title": "How to play",

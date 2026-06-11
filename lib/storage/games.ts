@@ -1,25 +1,15 @@
-import type { GameState, PlayerId } from '@/lib/game/types';
+import type { GameState } from '@/lib/game/types';
 
-/** localStorage-backed game list and player stats — the prototype's stand-in
- *  for maeth's networked API (lib/api.ts). */
+/** localStorage-backed game list — the prototype's stand-in for a networked API. */
 
 export interface SavedGame {
   id: string;
   createdAt: string;
   updatedAt: string;
-  /** Guards against counting the same finished game in the stats twice. */
-  resultRecorded: boolean;
   state: GameState;
 }
 
-export interface PlayerStats {
-  wins: number;
-  losses: number;
-  draws: number;
-}
-
 const GAMES_KEY = 'two-towers.games';
-const STATS_KEY = 'two-towers.stats';
 
 function readJson<T>(key: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback;
@@ -45,7 +35,6 @@ export function createGame(state: GameState): SavedGame {
     id: crypto.randomUUID(),
     createdAt: now,
     updatedAt: now,
-    resultRecorded: false,
     state,
   };
   writeGames([game, ...listGames()]);
@@ -64,16 +53,4 @@ export function deleteGame(id: string) {
 
 function writeGames(games: SavedGame[]) {
   localStorage.setItem(GAMES_KEY, JSON.stringify(games));
-}
-
-export function getStats(): PlayerStats {
-  return readJson<PlayerStats>(STATS_KEY, { wins: 0, losses: 0, draws: 0 });
-}
-
-export function recordResult(winner: PlayerId | null) {
-  const stats = getStats();
-  if (winner === 'human') stats.wins += 1;
-  else if (winner === 'bot') stats.losses += 1;
-  else stats.draws += 1;
-  localStorage.setItem(STATS_KEY, JSON.stringify(stats));
 }
