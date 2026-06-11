@@ -21,21 +21,23 @@ export default function Board({
   onCellClick,
 }: Props) {
   return (
-    <div className="grid grid-cols-4 gap-2 w-full max-w-md">
-      {state.board.flat().map((cell) => (
-        <CellView
-          key={`${cell.row}-${cell.col}`}
-          cell={cell}
-          isSelected={
-            selected !== null &&
-            selected.row === cell.row &&
-            selected.col === cell.col
-          }
-          isLegalTarget={includesRef(legalTargets, cell)}
-          isMobilizationTarget={includesRef(mobilizationTargets, cell)}
-          onClick={() => onCellClick({ row: cell.row, col: cell.col })}
-        />
-      ))}
+    <div className="board">
+      <div className="board__grid">
+        {state.board.flat().map((cell) => (
+          <CellView
+            key={`${cell.row}-${cell.col}`}
+            cell={cell}
+            isSelected={
+              selected !== null &&
+              selected.row === cell.row &&
+              selected.col === cell.col
+            }
+            isLegalTarget={includesRef(legalTargets, cell)}
+            isMobilizationTarget={includesRef(mobilizationTargets, cell)}
+            onClick={() => onCellClick({ row: cell.row, col: cell.col })}
+          />
+        ))}
+      </div>
     </div>
   );
 }

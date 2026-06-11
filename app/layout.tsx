@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Providers from "@/components/Providers";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -17,6 +18,9 @@ export const metadata: Metadata = {
   description: "Board strategy prototype: Human vs Bot",
 };
 
+// Apply the stored theme before first paint to avoid a flash of the wrong one.
+const themeInit = `try{var t=localStorage.getItem('two-towers.theme');document.documentElement.setAttribute('data-theme',t==='light'?'light':'dark')}catch(e){}`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -24,10 +28,14 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      lang="ru"
+      suppressHydrationWarning
+      className={`${geistSans.variable} ${geistMono.variable} antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body>
+        <script dangerouslySetInnerHTML={{ __html: themeInit }} />
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }

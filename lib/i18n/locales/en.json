@@ -1,0 +1,77 @@
+{
+  "common": {
+    "loading": "Loading…",
+    "you": "You",
+    "bot": "Bot",
+    "close": "Close",
+    "ok": "OK"
+  },
+  "login": {
+    "title": "Two Towers",
+    "subtitle": "Two Towers — a turn-based strategy on a {size}×{size} board",
+    "guest": "Play as guest"
+  },
+  "lobby": {
+    "create": "Create game",
+    "yourGames": "Your games",
+    "noGames": "No active games yet.",
+    "continueGame": "Continue",
+    "delete": "Delete",
+    "vsBot": "vs Bot",
+    "confirmDelete": "Delete this game?",
+    "cancel": "Cancel",
+    "help": "How to play",
+    "settings": "Settings",
+    "theme": "Theme",
+    "language": "Language",
+    "logout": "Sign out"
+  },
+  "status": {
+    "active": "in progress",
+    "over": "finished"
+  },
+  "stats": {
+    "title": "Statistics",
+    "player": "Player",
+    "wins": "Wins",
+    "losses": "Losses",
+    "draws": "Draws",
+    "empty": "No finished games yet."
+  },
+  "rules": {
+    "title": "How to play",
+    "body": "The goal is to **capture the enemy main castle**.\n{size}×{size} board. Each player starts with a main castle in their corner holding {start} soldiers.\n**A turn has two phases.** First, reinforcements: {castleIncome} per main castle, {fortIncome} per fort, {cellIncome} per other owned cell — place them on your castle or forts. Then perform one action.\n**Actions (one per turn):**\n• **Move** — send soldiers to an adjacent cell you own.\n• **Occupy** — send soldiers to an adjacent neutral cell. It becomes yours with exactly the soldiers you sent.\n• **Attack** — send soldiers to an adjacent enemy cell. You must send more than its defense: soldiers ×{fortDef} on a fort, ×{castleDef} on a main castle. You lose soldiers equal to the defense; the rest capture the cell. A captured fort is destroyed.\n• **Build fort** — costs {fortCost} soldiers on the selected cell. At most {maxForts} forts per player.\n• **Pass** — skip the action.\nOccupied cells stay yours even after all soldiers leave, and they keep producing income."
+  },
+  "game": {
+    "hintAllocate": "Reinforcements: {n} — click a castle or fort to place them",
+    "hintSelect": "Your turn — select one of your cells",
+    "hintTarget": "Click a highlighted cell — or one of yours to reselect",
+    "buildFort": "Build fort (−{cost})",
+    "pass": "Skip turn",
+    "allocateTitle": "Reinforcements",
+    "inCastle": "To castle",
+    "inFort": "To fort",
+    "reserveCount": "In reserve",
+    "actMove": "Move",
+    "actOccupy": "Occupy",
+    "actAttack": "Attack",
+    "defenseHint": "Target defense: {d} — you must send more",
+    "goCount": "March",
+    "stayCount": "Stay",
+    "botThinking": "Bot is thinking…",
+    "notFound": "Game not found",
+    "toLobby": "To lobby"
+  },
+  "result": {
+    "win": "🎉 You won!",
+    "loss": "😞 Defeat",
+    "winSub": "The enemy castle has fallen",
+    "lossSub": "Your castle has fallen",
+    "again": "Play again",
+    "viewBoard": "View board"
+  },
+  "languages": {
+    "ru": "Русский",
+    "en": "English"
+  }
+}
