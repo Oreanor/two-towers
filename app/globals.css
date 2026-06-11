@@ -157,9 +157,12 @@
 
 .iso-cell-mine:has(.iso-tile:hover, .iso-fig-click:hover) .iso-fig,
 .iso-cell-mine:has(.iso-tile:hover, .iso-fig-click:hover) .iso-count {
-  z-index: 30;
   animation: iso-fig-pulse 0.85s ease-in-out infinite;
 }
+/* Lift the hovered figures above all others, but keep badges above figures. */
+.iso-cell-mine:has(.iso-tile:hover, .iso-fig-click:hover) .iso-fig {
+  z-index: 150;
+}
 .iso-cell-mine:has(.iso-tile:hover, .iso-fig-click:hover) .iso-count {
-  z-index: 40;
+  z-index: 250;
 }

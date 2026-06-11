@@ -22,24 +22,38 @@ import {
 import type { BotAction, Cell, CellRef, GameState } from './types';
 import { FORT_COST } from './constants';
 
+// A Cell is structurally a CellRef (it has row/col), so it can be passed
+// straight to manhattan / getNeighbors / canAttack / canOccupy — refOf is only
+// used when building a BotAction, to store a clean ref instead of the cell.
+
 const BOT_FORT_MIN_SOLDIERS = 7;
 const BOT_OCCUPY_MIN_SOURCE = 3;
 const MIN_CELLS_BEFORE_FORT = 3;
+// Random spread added to decision scores so two bots don't play mirror-perfect.
+const JITTER = 7;
+
+type BotStyle = { aggression: number };
+
+/** Each side derives a stable but different personality from the game seed, so
+ *  white and black don't make identical mirrored moves. */
+function sideStyle(state: GameState): BotStyle {
+  const seed = state.aiSeed ?? 0.5;
+  const mix = state.currentPlayer === 'human' ? seed : seed * 1.618 + 0.37;
+  return { aggression: mix - Math.floor(mix) }; // [0,1)
+}
 
 /** Reinforce the mobilization point closest to the enemy front. */
 function allocateBotIncome(state: GameState): GameState {
   if (state.pendingIncome === 0) return { ...state, phase: 'action' };
 
-  const self = state.currentPlayer;
-  const enemy = opponentOf(self);
-  const enemyCells = getPlayerCells(state.board, enemy);
-  const points = getMobilizationCells(state.board, self);
+  const enemyCells = getPlayerCells(state.board, opponentOf(state.currentPlayer));
+  const points = getMobilizationCells(state.board, state.currentPlayer);
   if (points.length === 0) return { ...state, phase: 'action' };
 
   const distToFront = (cell: Cell) =>
     enemyCells.length === 0
       ? 0
-      : Math.min(...enemyCells.map((h) => manhattan(refOf(cell), refOf(h))));
+      : Math.min(...enemyCells.map((h) => manhattan(cell, h)));
 
   const sorted = [...points].sort((a, b) => {
     const fortPriority =
@@ -47,10 +61,11 @@ function allocateBotIncome(state: GameState): GameState {
     if (fortPriority !== 0) return fortPriority;
     const dist = distToFront(a) - distToFront(b);
     if (dist !== 0) return dist;
-    return a.soldiers - b.soldiers;
+    if (a.soldiers !== b.soldiers) return a.soldiers - b.soldiers;
+    return Math.random() - 0.5;
   });
 
-  return placeIncome(state, refOf(sorted[0]), state.pendingIncome);
+  return placeIncome(state, sorted[0], state.pendingIncome);
 }
 
 function attackWeight(target: Cell): number {
@@ -62,10 +77,9 @@ function attackWeight(target: Cell): number {
 }
 
 function minDistToEnemy(state: GameState, ref: CellRef): number {
-  const enemy = opponentOf(state.currentPlayer);
-  const enemyCells = getPlayerCells(state.board, enemy);
+  const enemyCells = getPlayerCells(state.board, opponentOf(state.currentPlayer));
   if (enemyCells.length === 0) return 99;
-  return Math.min(...enemyCells.map((h) => manhattan(ref, refOf(h))));
+  return Math.min(...enemyCells.map((h) => manhattan(ref, h)));
 }
 
 /** The enemy main castle — the bot's actual objective. */
@@ -84,49 +98,44 @@ function scoreFortSite(
   cell: Cell,
   castle: Cell | undefined,
 ): number {
-  const ref = refOf(cell);
-  const distEnemy = minDistToEnemy(state, ref);
   // Strong forward bias: a fort is only useful out toward the enemy.
-  let score = (8 - distEnemy) * 20;
+  let score = (8 - minDistToEnemy(state, cell)) * 20;
 
   if (castle) {
-    const dCastle = manhattan(ref, refOf(castle));
+    const dCastle = manhattan(cell, castle);
     // Hugging the castle is pointless; want it at least a cell out.
     if (dCastle <= 1) score -= 120;
     else score += Math.min(dCastle, 4) * 6;
   }
 
-  score += (3 - distToCenter(ref)) * 4;
+  score += (3 - distToCenter(cell)) * 4;
   score += Math.min(cell.soldiers - FORT_COST, 12);
+  score += Math.random() * JITTER; // break ties between sites / mirror play
 
-  const forts = getPlayerCells(state.board, state.currentPlayer).filter(
-    (c) => c.building === 'fort',
-  );
-  for (const fort of forts) {
-    if (manhattan(ref, refOf(fort)) <= 1) score -= 20;
+  for (const fort of getPlayerCells(state.board, state.currentPlayer)) {
+    if (fort.building === 'fort' && manhattan(cell, fort) <= 1) score -= 20;
   }
 
   return score;
 }
 
 function pickFortSite(state: GameState): CellRef | null {
-  const self = state.currentPlayer;
-  const owned = getPlayerCells(state.board, self);
+  const owned = getPlayerCells(state.board, state.currentPlayer);
   if (owned.length < MIN_CELLS_BEFORE_FORT) return null;
 
-  const castle = getMainCastle(state.board, self);
+  const castle = getMainCastle(state.board, state.currentPlayer);
   const allCandidates = owned.filter(
     (cell) =>
       cell.building === null &&
       cell.soldiers >= BOT_FORT_MIN_SOLDIERS &&
-      canBuildFort(state, refOf(cell)),
+      canBuildFort(state, cell),
   );
   if (allCandidates.length === 0) return null;
 
-  // Prefer sites at least one cell away from the castle; only fall back to
-  // castle-adjacent ground if nothing further out is available.
+  // Prefer sites at least one cell out from the castle; fall back to
+  // castle-adjacent ground only if nothing further out qualifies.
   const forward = allCandidates.filter(
-    (c) => !castle || manhattan(refOf(c), refOf(castle)) >= 2,
+    (c) => !castle || manhattan(c, castle) >= 2,
   );
   const candidates = forward.length > 0 ? forward : allCandidates;
 
@@ -140,16 +149,13 @@ function pickFortSite(state: GameState): CellRef | null {
     }
   }
 
-  if (!best || bestScore < 8) return null;
-  return refOf(best);
+  return best && bestScore >= 8 ? refOf(best) : null;
 }
 
 function occupySquadSize(state: GameState, source: Cell, target: Cell): number {
-  const center = { row: 1.5, col: 1.5 };
-  const nearCenter =
-    Math.abs(target.row - center.row) + Math.abs(target.col - center.col) <= 2;
+  const nearCenter = distToCenter(target) <= 2;
   const enemy = opponentOf(state.currentPlayer);
-  const enemyNearby = getNeighbors(state.board, refOf(target)).some(
+  const enemyNearby = getNeighbors(state.board, target).some(
     (n) => n.owner === enemy,
   );
   const available = source.soldiers - 1;
@@ -175,10 +181,16 @@ function attackSquadSize(
   if (target.building === 'mainCastle') return maxSend;
 
   // Send enough surplus that the captured cell can hold, not the razor minimum
-  // (forts are worth a little extra). Still keep a rear guard at the source.
+  // (forts are worth a little extra).
   const margin = target.building === 'fort' ? 6 : 4;
-  const efficient = needed + Math.min(margin, maxSend - needed);
-  return Math.min(maxSend, efficient);
+  return Math.min(maxSend, needed + Math.min(margin, maxSend - needed));
+}
+
+/** Identity of a move (path / cell), ignoring soldier count — for anti-repeat. */
+function actionSig(a: BotAction): string {
+  if (a.type === 'buildFort') return `fort:${a.cell.row},${a.cell.col}`;
+  if (a.type === 'pass') return 'pass';
+  return `${a.type}:${a.from.row},${a.from.col}>${a.to.row},${a.to.col}`;
 }
 
 /** A small trade — the kind that drags a bot-vs-bot game into a stalemate. */
@@ -190,71 +202,93 @@ function isPettyAction(action: BotAction): boolean {
 }
 
 /**
- * `breakthrough` is set after several petty trades in a row: the bot then
- * refuses the small attack/occupy trades and instead masses its army at the
- * enemy castle until it can force a real result.
+ * `breakthrough` (set after several petty trades in a row) makes the bot refuse
+ * small trades and mass its army at the enemy castle. `forbid` is a move
+ * signature to skip, used to stop it repeating the same move three times.
  */
-function chooseBotAction(state: GameState, breakthrough: boolean): BotAction {
+function chooseBotAction(
+  state: GameState,
+  breakthrough: boolean,
+  style: BotStyle,
+  forbid: string | null,
+): BotAction {
   const self = state.currentPlayer;
   const enemy = opponentOf(self);
   const ownCells = getPlayerCells(state.board, self);
+  const blocked = (a: BotAction) => forbid != null && actionSig(a) === forbid;
+  // A more aggressive side commits more of a big stack (smaller rear guard).
+  const sendFrac = 0.8 + style.aggression * 0.2;
+  const castle = enemyCastleRef(state);
 
-  // Attacks: always allowed against buildings (forts/castle) and decisive
-  // strikes; in breakthrough we drop the tiny ≤3-soldier trades on plain cells.
-  let bestAttack: BotAction | null = null;
-  let bestWeight = -1;
+  // Attacks. Decisive strikes (capturing a fort/castle, or a >3-soldier blow)
+  // fire now; petty ≤3-soldier trades are held back until after we've tried to
+  // maneuver the main army, so an idle stack isn't pre-empted by scout-trading.
+  let bestDecisive: BotAction | null = null;
+  let bestDecisiveW = -1;
+  let bestPetty: BotAction | null = null;
+  let bestPettyW = -1;
   for (const source of ownCells) {
-    for (const target of getNeighbors(state.board, refOf(source))) {
+    for (const target of getNeighbors(state.board, source)) {
       if (target.owner !== enemy) continue;
       const sent = attackSquadSize(state, source, target);
-      if (sent === null) continue;
-      if (!canAttack(state, refOf(source), refOf(target), sent)) continue;
-      if (breakthrough && sent <= 3 && target.building === null) continue;
-      const weight = attackWeight(target);
-      if (weight > bestWeight) {
-        bestWeight = weight;
-        bestAttack = {
-          type: 'attack',
-          from: refOf(source),
-          to: refOf(target),
-          soldiers: sent,
-        };
+      if (sent === null || !canAttack(state, source, target, sent)) continue;
+      const act: BotAction = {
+        type: 'attack',
+        from: refOf(source),
+        to: refOf(target),
+        soldiers: sent,
+      };
+      if (blocked(act)) continue;
+      const weight = attackWeight(target) + Math.random();
+      if (target.building !== null || sent > 3) {
+        if (weight > bestDecisiveW) {
+          bestDecisiveW = weight;
+          bestDecisive = act;
+        }
+      } else if (weight > bestPettyW) {
+        bestPettyW = weight;
+        bestPetty = act;
       }
     }
   }
-  if (bestAttack) return bestAttack;
+  if (bestDecisive) return bestDecisive;
 
-  // PUSH the army toward the enemy castle as a single mass — this comes before
-  // grabbing empty side cells, so a big "tank" presses the enemy instead of
-  // dribbling itself away. Onto own ground it moves; onto empty ground toward
-  // the castle it rolls the whole stack (not a small squad).
-  const castle = enemyCastleRef(state);
+  // Plant a forward fort once a good site has built up (strongpoint +
+  // mobilization). Before the march so a big stack consolidates rather than
+  // always rolling on — otherwise forts never get built.
+  const fortRef = pickFortSite(state);
+  if (fortRef && !blocked({ type: 'buildFort', cell: fortRef })) {
+    return { type: 'buildFort', cell: fortRef };
+  }
+
+  // March the army on the enemy castle as one mass — a "tank" presses forward
+  // (onto own ground it moves, onto empty ground it rolls the whole stack)
+  // rather than dribbling itself onto side cells. Sidesteps to flank a blocker.
   if (castle) {
     let bestPush: BotAction | null = null;
     let bestPushScore = -1;
     for (const source of ownCells) {
-      const reserve = garrisonReserve(source);
-      let mass = source.soldiers - reserve;
+      let mass = source.soldiers - garrisonReserve(source);
       if (mass <= 0) continue;
-      if (!breakthrough && mass > 6) mass = Math.ceil(mass * 0.7);
-      const sDist = manhattan(refOf(source), castle);
-      for (const n of getNeighbors(state.board, refOf(source))) {
-        const nDist = manhattan(refOf(n), castle);
-        if (nDist >= sDist) continue; // must close on the castle
+      if (!breakthrough && mass > 8) mass = Math.ceil(mass * sendFrac);
+      const sDist = manhattan(source, castle);
+      for (const n of getNeighbors(state.board, source)) {
+        const nDist = manhattan(n, castle);
+        const forward = nDist < sDist;
+        // Move closer, or sidestep at the same distance to flank — never retreat.
+        if (!forward && nDist !== sDist) continue;
         let cand: BotAction | null = null;
         if (n.owner === self) {
           cand = { type: 'move', from: refOf(source), to: refOf(n), soldiers: mass };
         } else if (n.owner === null) {
-          const retakeable = getNeighbors(state.board, refOf(n)).some(
-            (e) => e.owner === enemy && e.soldiers - garrisonReserve(e) > mass,
-          );
-          if (retakeable) continue;
-          if (!canOccupy(state, refOf(source), refOf(n), mass)) continue;
+          if (!canOccupy(state, source, n, mass)) continue;
           cand = { type: 'occupy', from: refOf(source), to: refOf(n), soldiers: mass };
         } else {
-          continue; // enemy cell — already considered by the attack pass
+          continue; // enemy cell — handled by the attack pass
         }
-        const score = mass * 10 + (8 - nDist) * 3;
+        if (blocked(cand)) continue;
+        const score =
+          (forward ? 1000 : 0) + mass * 10 + (8 - nDist) * 3 + Math.random() * JITTER;
         if (score > bestPushScore) {
           bestPushScore = score;
           bestPush = cand;
@@ -264,34 +298,38 @@ function chooseBotAction(state: GameState, breakthrough: boolean): BotAction {
     if (bestPush) return bestPush;
   }
 
-  const fortRef = pickFortSite(state);
-  if (fortRef) return { type: 'buildFort', cell: fortRef };
+  // Only now, if the army genuinely can't maneuver, take a small trade.
+  if (!breakthrough && bestPetty) return bestPetty;
 
   // Lowest priority: claim a little side territory for income with a spare
-  // squad — never in breakthrough, never into a cell the enemy can retake.
+  // squad — never in breakthrough, never from a big stack (keep it massed),
+  // never into a cell the enemy can immediately retake.
   if (!breakthrough) {
     let bestOccupy: BotAction | null = null;
     let bestOccupyScore = -1;
     for (const source of ownCells) {
-      if (source.soldiers < BOT_OCCUPY_MIN_SOURCE) continue;
-      for (const target of getNeighbors(state.board, refOf(source))) {
+      if (source.soldiers < BOT_OCCUPY_MIN_SOURCE || source.soldiers > 8) continue;
+      for (const target of getNeighbors(state.board, source)) {
         if (target.owner !== null) continue;
         const squad = occupySquadSize(state, source, target);
-        if (!canOccupy(state, refOf(source), refOf(target), squad)) continue;
-        const retakeable = getNeighbors(state.board, refOf(target)).some(
+        if (!canOccupy(state, source, target, squad)) continue;
+        const act: BotAction = {
+          type: 'occupy',
+          from: refOf(source),
+          to: refOf(target),
+          soldiers: squad,
+        };
+        if (blocked(act)) continue;
+        const retakeable = getNeighbors(state.board, target).some(
           (n) => n.owner === enemy && n.soldiers - garrisonReserve(n) > squad,
         );
         if (retakeable) continue;
-        const dCastle = castle ? manhattan(refOf(target), castle) : 0;
-        const score = 100 - dCastle * 8 + (3 - distToCenter(refOf(target))) * 3;
+        const dCastle = castle ? manhattan(target, castle) : 0;
+        const score =
+          100 - dCastle * 8 + (3 - distToCenter(target)) * 3 + Math.random() * JITTER;
         if (score > bestOccupyScore) {
           bestOccupyScore = score;
-          bestOccupy = {
-            type: 'occupy',
-            from: refOf(source),
-            to: refOf(target),
-            soldiers: squad,
-          };
+          bestOccupy = act;
         }
       }
     }
@@ -303,16 +341,32 @@ function chooseBotAction(state: GameState, breakthrough: boolean): BotAction {
 
 /** Full AI turn for whoever is `state.currentPlayer`. */
 export function executeBotTurn(state: GameState): GameState {
-  let next = allocateBotIncome(state);
-  const stall = state.aiStall ?? 0;
+  // Seed the game's AI personality once, lazily.
+  const seeded =
+    state.aiSeed === undefined ? { ...state, aiSeed: Math.random() } : state;
+  let next = allocateBotIncome(seeded);
+  const self = seeded.currentPlayer;
+  const stall = seeded.aiStall ?? 0;
   const breakthrough = stall >= 3;
-  const action = chooseBotAction(next, breakthrough);
-  // After forcing a breakthrough, reset; otherwise count consecutive petty trades.
+  const style = sideStyle(seeded);
+
+  // Anti-loop: if the natural choice would repeat the same move a third time in
+  // a row, swap to the next-best alternative — but only if a real one exists
+  // (don't pass just to avoid a repeat).
+  const prev = seeded.aiRepeat?.[self];
+  let action = chooseBotAction(next, breakthrough, style, null);
+  if (prev && prev.n >= 2 && actionSig(action) === prev.sig) {
+    const alt = chooseBotAction(next, breakthrough, style, prev.sig);
+    if (alt.type !== 'pass') action = alt;
+  }
+  const sig = actionSig(action);
+  const repeatN = prev && prev.sig === sig ? prev.n + 1 : 1;
+
   next = {
     ...next,
     aiStall: breakthrough ? 0 : isPettyAction(action) ? stall + 1 : 0,
+    aiRepeat: { ...seeded.aiRepeat, [self]: { sig, n: repeatN } },
   };
-  const who = state.currentPlayer === 'human' ? 'Human' : 'Bot';
 
   switch (action.type) {
     case 'attack':
@@ -327,9 +381,11 @@ export function executeBotTurn(state: GameState): GameState {
     case 'move':
       next = moveSoldiers(next, action.from, action.to, action.soldiers);
       break;
-    case 'pass':
+    case 'pass': {
+      const who = self === 'human' ? 'Human' : 'Bot';
       next = { ...next, log: [...next.log, `${who} passed.`] };
       break;
+    }
   }
 
   return endTurn(next);

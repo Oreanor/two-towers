@@ -199,7 +199,8 @@ export default function IsoBoard({
                 fpos,
                 undefined,
                 () => onCellClick(ref),
-                10 + depth * 4,
+                // Front cells (higher depth) sit above back ones; +i within stack.
+                depth * 10,
               )}
 
             {!isAnimTarget && cell.owner !== null && cell.soldiers > 0 && (
@@ -212,7 +213,8 @@ export default function IsoBoard({
                 style={{
                   left: `${fpos.left}%`,
                   top: `${fpos.top - lift}%`,
-                  zIndex: 20 + depth,
+                  // Always above every figure (max ~64) so neighbours never hide it.
+                  zIndex: 200 + depth,
                 }}
               >
                 {cell.soldiers}
@@ -223,7 +225,7 @@ export default function IsoBoard({
               <span
                 key={f.id}
                 className={cn(
-                  'pointer-events-none absolute z-[46] rounded-full px-[9px] py-0.5 text-lg leading-tight font-extrabold text-white shadow-[0_2px_6px_rgba(0,0,0,0.4)] animate-float-up-iso',
+                  'pointer-events-none absolute z-[300] rounded-full px-[9px] py-0.5 text-lg leading-tight font-extrabold text-white shadow-[0_2px_6px_rgba(0,0,0,0.4)] animate-float-up-iso',
                   cell.owner === 'human' && 'bg-human',
                   cell.owner === 'bot' && 'bg-bot',
                 )}
@@ -277,7 +279,7 @@ function MoveLayer({
   const soldierSrc = factionAsset(anim.faction, 'soldier');
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-[45]">
+    <div className="pointer-events-none absolute inset-0 z-[400]">
       {killsDefender &&
         defenderFaction &&
         cellFigs(hold!, defenderFaction, to, 'animate-iso-fig-die')}

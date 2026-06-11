@@ -1,6 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useRouter } from 'next/navigation';
 import AmountModal from '@/components/AmountModal';
 import AppHeader from '@/components/AppHeader';
@@ -59,6 +66,11 @@ const AI_BEFORE_MIN_MS = 450;
 const AI_BEFORE_MAX_MS = 900;
 const AI_AFTER_MS = 350;
 
+// Run the move-animation setup before the browser paints, so the board never
+// shows one static frame of the arrived piece before the animation hides it.
+const useIsoLayoutEffect =
+  typeof window !== 'undefined' ? useLayoutEffect : useEffect;
+
 export default function GameScreen({ gameId }: { gameId: string }) {
   const { user, logout } = useAuth();
   const { t } = useI18n();
@@ -116,7 +128,7 @@ export default function GameScreen({ gameId }: { gameId: string }) {
   const state = envelope?.state ?? null;
   const lastMove = state?.lastMove ?? null;
 
-  useEffect(() => {
+  useIsoLayoutEffect(() => {
     if (!state || !lastMove || animatedMoveRef.current === lastMove.id) return;
     animatedMoveRef.current = lastMove.id;
     const faction =

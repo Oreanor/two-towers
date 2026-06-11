@@ -45,6 +45,10 @@ export type GameState = {
   lastMove?: LastMove | null;
   /** Consecutive "petty trade" bot turns; at 3 the AI switches to breakthrough. */
   aiStall?: number;
+  /** Per-game seed; each side derives a different "personality" from it. */
+  aiSeed?: number;
+  /** Per-side last action + how many times in a row it repeated (anti-loop). */
+  aiRepeat?: Partial<Record<PlayerId, { sig: string; n: number }>>;
   log: string[];
 };
 
